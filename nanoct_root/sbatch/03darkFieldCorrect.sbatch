@@ -110,8 +110,6 @@ cd "$WD" || { echo "Failed to cd into $WD"; exit 1; }
 #Start script
 ARG="--force -j -1"
 
-source initGanrec
-
 function testExistence() {
     if [[ ! -f $1 ]]; then
         echo "File $1 does not exist."
