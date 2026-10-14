@@ -1,21 +1,5 @@
-laupy project INFO file created by lautools on: 2026-10-05 17:17:30
-Project dir: /asap3/petra3/gpfs/p05/2026/data/11024869/scratch_cc/kct_p05N_BONE_Jost
-Beamline: p05
-Beamline setup: Nanotomography (EH1)
-Beamtime label: p05N_BONE_Jost
-Beamtime root dir: /asap3/petra3/gpfs/p05/2026/data/11024869
-Beamtime ID: 11024869
-Proposal ID: 20010001
-Beamtime PI: —
-Workbench content dir: /data/hereon/wp/user/kulvaitv/KCT_git/pipelines/bin/kct_p05N_BONE_Jost
-Number of samples: 8
-
--------------------
-Original INFO content follows:
--------------------
-Use setupPipelineForBeamtime script to generate this file 
-#PATH=$PATH:/data/hereon/wp/group/laupy/bin/
-#setupPipelineForBeamtime
+#Use setupPipelineForBeamtime script or lautools-browser beamtime->project from recipe to generate this file 
+#PATH=$PATH:/data/hereon/wp/group/laupy/bin/ ... if you do not have kct- and dentk- tools in path
 
 # submitslurm command – key commonly used parameters (see full: submitslurm -h)
 #
