@@ -1,0 +1,442 @@
+#!/bin/bash
+set -euo pipefail
+scriptname=$(basename $0)
+trap 'echo "[$(date)] ERROR in ${scriptname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
+start_time=$(date +%s)
+scriptparams="$@"
+echo "START ${scriptname} ${scriptparams}"
+#To run this script properly needed 
+#source initGanrec
+#or
+#LoadModule python/3.10
+#Detector size is in h5 file when no file is provided
+if [ ! -f ./params ]; then
+    echo "File params not found."
+    exit 1
+fi
+. ./params
+
+if [[ -z "${PLATFORM:-}" ]]; then
+    PLATFORM=$(platformID)
+fi
+if [[ -z "${ITERATIONS:-}" ]]; then
+    ITERATIONS=40
+fi
+
+ROTATIONAXISFILE="rotationaxis_EXT_360.log"
+ROTATIONAXISFILE="rotationaxis_poisson.log"
+
+SIDON=false
+FDK=false
+ASYNC=false
+WAIT=false
+REPORTKTH=0
+ART=false
+KRYLOV=true
+GLSQR=false
+TIKHONOV=-1.0
+STARTINDEX=0
+SLICECOUNT=1
+BINNING=2
+INPUTEXT=extb2/ext_tv.den
+DIR=recb2
+PWLSVECTOR=
+ADDITIONALOFFSETPIX=0.0
+ZEROOFFSET=0
+RINGCORRECTION=false
+MAGNIFICATION=""
+PM=""
+BOXX=""
+BOXY=""
+STRAIGHT_ROTATION_AXIS=false
+#-v will change KEEPOUTPUTFILES to true
+KEEPINPUTFILES=false
+#-u will change TIFFOUTPUT to false
+TIFFOUTPUT=true
+GEOMETRY_INFO_FILE="h5"
+
+usage() {
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  -a, --art-reconstruction         Use ART reconstruction method
+  -b, --binning <INT>              Set binning factor (default: $BINNING)
+  -c, --slice-count <INT>               Set number of slices (default: $SLICECOUNT)
+  -d, --pwls-vector <PATH>         Provide path to PWLS vector file
+  -e, --offset-pixels <FLOAT>      Additional offset in pixels (default: $ADDITIONALOFFSETPIX)
+  -f, --fdk-reconstruction         Use FDK reconstruction method
+  -g, --zero-offset <INT>          Enable zero offset (0 or 1)
+  -i, --input <FILE>               Input file (default: $INPUTEXT)
+  -j, --start-index <INT>          Set start index (default: $STARTINDEX)
+  -k, --report-kth <INT>           Report every k-th slice (default: $REPORTKTH)
+  -l, --glsqr                      Use GLSQR (implies Krylov, disables ART/FDK)
+  -m, --pm <VALUE>                 Set projection matrix parameter
+      --rotation-axis-file <FILE>  Set path for rotation axis file (default: $ROTATIONAXISFILE)
+      --straight-rotation-axis     Assume straight rotation axis, use no skew fitting and only fit center of rotation in y direction
+      --geometry-info <FILE>       H5 file with dataset information, or DEN tick file with dataset information (default: $GEOMETRY_INFO_FILE)
+  -n, --iterations <INT>           Set number of iterations (default: $ITERATIONS)
+  -o, --output-dir <DIR>           Set output directory (default: $DIR)
+  -p, --platform <PLATFORM>        Set OpenCL platform ID (default: $PLATFORM)
+  -q, --magnification <FLOAT>      Set magnification factor
+  -r, --ring-correction            Enable ring artifact correction
+  -s, --siddon-projector           Use Siddon projector
+  -t, --tikhonov <FLOAT>           Set Tikhonov regularization weight (default: $TIKHONOV)
+  -u, --den-output                 Disable TIFF output (default: $TIFFOUTPUT)
+  -v, --keep-input-files           Keep intermediate input files
+  -w, --wait                       Enable wait mode
+  -x, --box-x <INT>                Set X size of the volume box
+  -y, --box-y <INT>                Set Y size of the volume box
+  -z, --box-z <INT>                Set Z size of the volume box
+  -h, --help                       Display this help message and exit
+
+Examples:
+  $(basename "$0") -a -b 2 -i data/input.ext
+  $(basename "$0") --fdk-reconstruction --rotation-axis-file my_axis.log
+EOF
+}
+
+# Short and long options (add long variants for selected options)
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+        -a|--art-reconstruction)
+            ART=true; KRYLOV=false; FDK=false; shift ;;
+        -b|--binning)
+            BINNING="$2"; shift 2 ;;
+        -c|--slice-count)
+            SLICECOUNT="$2"; shift 2 ;;
+        -d|--pwls-vector)
+            PWLSVECTOR="$2"; shift 2 ;;
+        -e|--offset-pixels)
+            ADDITIONALOFFSETPIX="$2"; shift 2 ;;
+        -f|--fdk-reconstruction)
+            KRYLOV=false; FDK=true; ART=false; shift ;;
+        -g|--zero-offset)
+            ZEROOFFSET="$2"; shift 2 ;;
+        -i|--input)
+            INPUTEXT="$2"; shift 2 ;;
+        -j|--start-index)
+            STARTINDEX="$2"; shift 2 ;;
+        -k|--report-kth)
+            REPORTKTH="$2"; shift 2 ;;
+        -l|--glsqr)
+            KRYLOV=true; GLSQR=true; ART=false; FDK=false; shift ;;
+        -m|--pm)
+            PM="$2"; shift 2 ;;
+		-n|--iterations)
+	    	ITERATIONS="$2"; shift 2 ;;
+		-o|--output-dir)
+	    	DIR="$2"; shift 2 ;;
+		-p|--platform)
+	    	PLATFORM="$2";
+			ASYNC=true; shift 2 ;;
+        -q|--magnification)
+            MAGNIFICATION="$2"; shift 2 ;;
+        -r|--ring-correction)
+            RINGCORRECTION=true; shift ;;
+        --rotation-axis-file)
+            ROTATIONAXISFILE="$2"; shift 2 ;;
+		--geometry-info)
+			GEOMETRY_INFO_FILE="$2"; shift 2 ;;
+        --straight-rotation-axis)
+	    	STRAIGHT_ROTATION_AXIS=true; shift ;;
+        -s|--siddon-projector)
+            SIDON=true; shift ;;
+        -t|--tikhonov)
+            TIKHONOV="$2"; shift 2 ;;
+        -u|--den-output)
+            TIFFOUTPUT=false; shift ;;
+        -v|--keep-input-files)
+            KEEPINPUTFILES=true; shift ;;
+        -w|--wait)
+            WAIT=true; shift ;;
+        -x|--box-x)
+            BOXX="$2"; shift 2 ;;
+        -y|--box-y)
+            BOXY="$2"; shift 2 ;;
+        -z|--box-z)
+            BOXZ="$2"; shift 2 ;;
+        -h|--help)
+            usage; exit 0 ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage error;
+            exit 1 ;;
+    esac
+done
+
+RELDIR=$(realpath ${DIR})
+if [[ ! -d ${DIR} ]]; then
+	echo "Creating reconstruction directory ${RELDIR} and log directory ${DIR}/log"
+	mkdir -p ${DIR}
+fi
+mkdir -p ${DIR}/log
+INPUTEXTSTR=`basename ${INPUTEXT%%.den}`
+TOPINDEX=$(calc "${STARTINDEX}+${SLICECOUNT}")
+echo "STARTINDEX=${STARTINDEX} SLICECOUNT=${SLICECOUNT} INPUTEXT=${INPUTEXT} DIR=${DIR} PM=${PM} PWLSVECTOR=${PWLSVECTOR} ADDITIONALOFFSETPIX=${ADDITIONALOFFSETPIX} ZEROOFFSET=${ZEROOFFSET} TOPINDEX=${TOPINDEX}"
+if [[ ${SLICECOUNT} == 1 ]]; then
+	FILESUFFIX=$( printf "%05d" ${STARTINDEX} )
+else
+	FILESUFFIX=$( printf "FROM_%05d_TO_%05d" ${STARTINDEX} ${TOPINDEX} )
+fi
+INPUTEXTIN="${DIR}/ext_truncated_${FILESUFFIX}.den"
+VOLOUTPREFIX="algvk_${INPUTEXTSTR}_${FILESUFFIX}"
+VOLOUT="${DIR}/${VOLOUTPREFIX}.den"
+TIFOUT="${DIR}/${VOLOUTPREFIX}.tif"
+LOG="${DIR}/log/${VOLOUTPREFIX}.log"
+
+if [[ ! -f $INPUTEXT ]]; then
+	echo "File $INPUTEXT does not exist!" >&2
+	exit 1
+fi
+
+
+echo "STARTINDEX=${STARTINDEX}"
+if [[ "$TIFFOUTPUT" = true ]]; then
+	echo "Checking for existing TIFF files in the range ${STARTINDEX} to ${TOPINDEX} with zero offset ${ZEROOFFSET}"
+	EXISTINGFILES=()
+	for ((i=0; i<${SLICECOUNT}; i++)); do
+		SLICENO=$(calc "${ZEROOFFSET}+${STARTINDEX}+${i}")
+		printf -v TIFSUFFIX "%05d" ${SLICENO}
+		TIFOUT="${DIR}/algvk_${INPUTEXTSTR}_${TIFSUFFIX}.tif"
+		if [[ -f "${TIFOUT}" ]]; then
+	        EXISTINGFILES+=("${TIFOUT}")
+		fi
+	done
+	EXISTINGTIFCOUNT=${#EXISTINGFILES[@]}
+	if (( EXISTINGTIFCOUNT == SLICECOUNT )); then
+	    echo "Files ${EXISTINGFILES[0]} to ${EXISTINGFILES[-1]} already exist! Exiting cleanly."
+	    exit 0
+	elif (( EXISTINGTIFCOUNT > 0 )); then
+	    echo "Some files in the range already exist: ${EXISTINGFILES[*]}. These will be overwritten."
+	fi
+fi
+
+if [[ -f "$VOLOUT" ]]; then
+	#In former case when no all TIFF files exist but VOLOUT does, remove it to avoid inconsitencies. In latter output just exists.
+    if [[ "$TIFFOUTPUT" = true ]]; then
+		echo "Removing existing file $VOLOUT" >&2
+		echo "Removing existing file $VOLOUT"
+		rm -f "$VOLOUT"
+    else
+	    echo "File $VOLOUT already exists, exiting cleanly." >&2
+	    echo "File $VOLOUT already exists, exiting cleanly."
+		exit 0
+	fi
+fi
+
+#To be able to incorporate additional offset mainly for testiong purposes
+pixel_size_x=${pixel_size_x:-1}
+pixel_size_y=${pixel_size_y:-1}
+BINNING=${BINNING:-2}
+PIXELSIZE=$(calc "${pixel_size_x}*${BINNING}")
+
+ADDITIONALOFFSET=$(calc "${ADDITIONALOFFSETPIX}*${PIXELSIZE}")
+MIDSLICE=$( calc "(${STARTINDEX}+${TOPINDEX}-1)/2" )
+echo "PIXELSIZE=${PIXELSIZE} ADDITIONALOFFSET=${ADDITIONALOFFSET} MIDSLICE=${MIDSLICE}"
+if [[ -z "$PM" ]]; then
+	PMTMP="${DIR}/${INPUTEXTSTR}_${FILESUFFIX}.pm"
+	ARG=()
+	if [[ -n "$MAGNIFICATION" ]]; then
+		ARG=(--override-magnification ${MAGNIFICATION})
+	fi
+	ARG+=(--force)
+	ARG+=(--detector-center-offsetvx " ${ADDITIONALOFFSET}")
+	ARG+=(--petra-compatibility-transform)
+	ARG+=(--material-ct-convention)
+	ARG+=(--bin-x $BINNING)
+	ARG+=(--bin-y $BINNING)
+	ARG+=(--detector-sizey $SLICECOUNT)
+	ARG+=(--input-file ${INPUTEXT})
+	ARG+=(--rotation-center-file ${ROTATIONAXISFILE})
+    if [[ "$STRAIGHT_ROTATION_AXIS" = false ]]; then
+		ARG+=(--rotation-center-file-fit-y ${MIDSLICE})
+    fi
+	ARG+=("${GEOMETRY_INFO_FILE}")
+	ARG+=("${PMTMP}")
+	echo "createProjectionMatrices.py ${ARG[*]}"
+	createProjectionMatrices.py ${ARG[@]}
+else
+	PMTMP=${PM}
+fi
+if [[ ! -f ${PMTMP} ]]; then
+	echo "File ${PMTMP} does not exist!" >&2
+	exit 1
+fi
+dentk-truncate -j 10 --force --y-from ${STARTINDEX} --y-to ${TOPINDEX} ${INPUTEXT} ${INPUTEXTIN}
+#Truncate PWLSVECTOR in y dimension, note that kct-pb2d-krylov accepts dimz equal to number of projections or equal to 1, so we do not have to care about dimz
+if [[ -n "${PWLSVECTOR:-}" ]]; then
+	PWLSVECTORIN="${DIR}/pwlsvector_${FILESUFFIX}.den"
+	dentk-truncate -j 10 --force --y-from ${STARTINDEX} --y-to ${TOPINDEX} ${PWLSVECTOR} ${PWLSVECTORIN}
+fi
+
+VOXSIZEXY=$(calc "${BINNING}*${pixel_size_x}")
+VOXSIZEZ=$(calc "${BINNING}*${pixel_size_y}")
+#NVX=$(calc "int(${pdimx}*sqrt(2)/${BINNING})")
+#PDX=$(calc "int(${pdimx}/${BINNING})")
+PDX=$(dentk-info --dim ${INPUTEXT} | cut -f1)
+SIZEFIT=$(dentk-matinfo --estimate-reconstruction-size --detector-size ${PDX} ${PMTMP} | grep optimal | cut -f1 -d" ")
+dentk-matinfo --estimate-reconstruction-size --detector-size ${PDX} ${PMTMP}
+echo "SIZEFIT=${SIZEFIT} Etimate of the size of the reconstruction based on detector size ${PDX}"
+if [[ ! -z "${SIZEFIT}" ]] && [[ ${SIZEFIT} -ge ${PDX} ]]; then
+	NVX=$SIZEFIT
+else
+	NVX=$(calc "2*${PDX}")
+fi
+#NVX=$(calc "int(2*${pdimx}/${BINNING})")
+#For compatibility
+#NVX=$PDX
+NVY=$NVX
+# Set NVX and NVY based on BOXX and BOXY if they are specified
+if [ -n "$BOXX" ]; then
+    NVX=$BOXX
+fi
+
+if [ -n "$BOXY" ]; then
+    NVY=$BOXY
+fi
+
+
+ARG="--volume-sizex $NVX --volume-sizey $NVY --voxel-sizex $VOXSIZEXY --voxel-sizey $VOXSIZEXY --voxel-sizez $VOXSIZEZ"
+
+prg_sync() {
+#Signature $OUTPUTLOG $CMD1 $CMD2 ...
+    local OUTPUTLOG=$1
+    shift
+
+    STARTX=$(date +%s.%N)
+
+    for PRG in "$@"; do
+        echo "Running $PRG"
+
+        bash -c "$PRG" >> "$OUTPUTLOG"
+        rc=$?
+
+        echo "exit_code=$rc for $PRG" >> "$OUTPUTLOG"
+
+        if (( rc != 0 )); then
+            return $rc
+        fi
+    done
+
+    ENDX=$(date +%s.%N)
+    DIFF=$(echo "$ENDX - $STARTX" | bc)
+    echo "prg_sync time ${DIFF}s"
+}
+
+prg_async()
+{
+#Signature $OUTPUTLOG $CMD1 $CMD2 ...
+    OUTPUTLOG=$1
+    shift
+    #DEV=$(redis-cli --raw brpop IDLEGPU 0 | awk '{if(NR>1)print}')
+	read DEV < <(GPU.py --pid $$ --get)
+    ID=$PLATFORM:$DEV
+    for PRG in "$@"; do
+        exit_code=0
+        PRG="${PRG} -p $ID"
+		prg_sync "${OUTPUTLOG}" "${PRG}"
+        exit_code=$?
+	    if (( exit_code != 0 )); then
+	       echo "Error: Command '$PRG' failed with exit code $exit_code" >&2
+	       GPU.py --release $DEV
+           return $exit_code
+	    fi
+    done
+    #node=$(redis-cli brpop $PLATFORM 0)
+    #gpurelease $DEV
+    #redis-cli lpush IDLEGPU $DEV
+	GPU.py --release $DEV
+}
+
+TMPDIR=$(mktemp -d -p . tmp_reconstructSlice2D_volumes.XXXXX)
+TMPVOLOUT="${TMPDIR}/${VOLOUTPREFIX}.den"
+
+if [[ "$FDK" = true ]]; then
+	PRG="kct-pb2d-backprojector --backprojector-fbp-scaling --barrier --cvp --relaxed $ARG ${INPUTEXTIN} ${PMTMP} ${TMPVOLOUT}"
+else
+	if [[ -n ${ITERATIONS} ]]; then
+		ARG="${ARG} --max-iterations ${ITERATIONS}"
+	fi
+	if [[ -n ${PWLSVECTOR} ]]; then
+		ARG="${ARG} --weights-wls ${PWLSVECTORIN}"
+	fi
+	PRG="kct-pb2d-krylov --force --cvp --cgls --barrier --relaxed $ARG ${INPUTEXTIN} ${PMTMP} ${TMPVOLOUT}"
+fi
+
+set +e
+if [[ "$ASYNC" = true ]]; then
+	prg_async ${LOG} "${PRG}"
+else
+	prg_sync ${LOG} "${PRG}"
+fi
+exit_code=$?
+if (( exit_code != 0 )); then
+   	rm -f ${VOLOUT}
+	echo "Error: Command '$PRG' failed with exit code $exit_code" >&2
+	exit $exit_code
+elif [[ "$TIFFOUTPUT" = false ]]; then
+	cp ${TMPVOLOUT} ${VOLOUT}
+fi
+set -e
+
+if [[ "$TIFFOUTPUT" = true ]]; then
+	#Single slice tif
+	denFilesToTifFiles.py --force --suffix ${VOLOUTPREFIX} ${TMPVOLOUT} ${TMPDIR}
+	#if [[ ${SLICECOUNT} == 1 ]]; then
+	#	mv "${DIR}/000${VOLOUTPREFIX}.tif" "${TIFOUT}"
+	#fi
+    for ((IND=0; IND<${SLICECOUNT}; IND++)); do
+		SLICENO=$(calc "${ZEROOFFSET}+${STARTINDEX}+${IND}")
+		printf -v TIFSUFFIX "%05d" ${SLICENO}
+		TIFOUT="${DIR}/algvk_${INPUTEXTSTR}_${TIFSUFFIX}.tif"
+		printf -v TIFIN "${TMPDIR}/%03d${VOLOUTPREFIX}.tif" ${IND}
+		if [[ -f "${TIFIN}" ]]; then
+			mv ${TIFIN} ${TIFOUT}
+		else
+			echo "File ${TIFIN} does not exist!"
+		fi
+	done
+fi
+
+if [[ "$KEEPINPUTFILES" = false ]]; then
+	if [[ -f "${PWLSVECTORIN:-}" ]]; then
+		rm ${PWLSVECTORIN}
+	fi
+	if [[ -f "${INPUTEXTIN}" ]]; then
+		rm ${INPUTEXTIN}
+	fi
+fi
+rm -rf ${TMPDIR}
+
+
+#Remove temporary PM only if it was actually created by this script and not supplied by user
+#if [[ -z "$PM" ]]; then
+#	rm -f ${PMTMP}
+#fi
+
+if [[ "$ASYNC" = false ]] || [[ "$WAIT" = true ]]; then
+    wait
+	end_time=$(date +%s)
+	elapsed_time=$((end_time - start_time))
+
+	# Convert elapsed time to hours, minutes, and seconds
+	hours=$((elapsed_time / 3600))
+	minutes=$(((elapsed_time % 3600) / 60))
+	seconds=$((elapsed_time % 60))
+
+	# Format the elapsed time as HH:MM:SS
+	formatted_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+	# Echo END message to stdout and stderr with the formatted elapsed time
+	echo "END ${scriptname} ${scriptparams} in $formatted_time"
+
+else
+	echo "END ${scriptname} ${scriptparams}, unknown time as this call is not waiting to subprocesses!"
+fi

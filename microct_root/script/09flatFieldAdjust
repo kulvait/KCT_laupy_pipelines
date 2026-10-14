@@ -1,0 +1,61 @@
+#!/bin/bash
+PATH=$PATH:/home/kulvaitv/BIG/KCT_git/pipelines/bin/synchro_edgescan
+PHASECONTRAST=false
+
+function flatFieldCorrect(){
+    MINFLAT=1.0
+    MINIMG=$(awk 'BEGIN {print 1.0/1024.0}')
+    DARK=${1%.den}
+    FLAT=${2%.den}
+    IMG=${3%.den}
+    TRA=${4%.den}
+    EXT=${5%.den}
+    rm -f ${DARK}_med
+    rm -f ${FLAT}_med
+    rm -f ${FLAT}_sub
+    rm -f ${FLAT}_cor
+    rm -f ${IMG}_sub
+    rm -f ${IMG}_max
+    rm -f ${IMG}_cor
+    rm -f ${TRA}.den
+    rm -f ${EXT}_exp.den
+    rm -f ${EXT}.den
+    ARG="--force -j 32"
+    dentk-framecalc1 --force --median ${DARK}.den ${DARK}_med
+    #dentk-framecalc1 --force --median ${FLAT}.den ${FLAT}_med
+    #dentk-calc ${ARG} --subtract ${FLAT}_med ${DARK}_med ${FLAT}_sub
+    #dentk-calc1 ${ARG} --max ${MINFLAT} ${FLAT}_sub ${FLAT}_cor 
+    dentk-framecalc ${ARG} --subtract ${IMG}.den ${DARK}_med ${IMG}_sub
+    dentk-calc1 ${ARG} --max ${MINIMG} ${IMG}_sub ${IMG}_max
+    dentk-framecalc ${ARG} --subtract ${FLAT}.den ${DARK}_med ${FLAT}_sub
+    dentk-calc1 ${ARG} --max ${MINFLAT} ${FLAT}_sub ${FLAT}_max
+	if [ "$PHASECONTRAST" = true ]; then
+		mv ${IMG}_max ${IMG}_cor
+	else
+		#START does not apply for phase contrast
+    	dentk-calc ${ARG} --min ${IMG}_max ${FLAT}_max ${IMG}_cor
+		#END does not apply for phase contrast
+	fi
+    dentk-framecalc ${ARG} --divide ${IMG}_cor ${FLAT}_max ${TRA}.den
+    dentk-calc1 ${ARG} --inv ${TRA}.den ${EXT}_exp.den
+    dentk-calc1 ${ARG} --log  ${EXT}_exp.den ${EXT}.den
+    rm -f ${DARK}_med
+    rm -f ${FLAT}_med
+    rm -f ${FLAT}_sub
+    rm -f ${FLAT}_cor
+    rm -f ${IMG}_sub
+    rm -f ${IMG}_max
+    rm -f ${IMG}_cor
+}
+
+if [ "$#" -ne 5 ]; then
+	echo "Expecting 5 inputs DAR FLAT IMG TRA EXT"
+fi
+
+DARK=$1
+FLAT=$2
+IMG=$3
+TRA=$4
+EXT=$5
+echo "Starting flat field correction of ${IMG} DAR=${DARK} REF=${FLAT} to produce TRA=${TRA} and EXT=${EXT}"
+flatFieldCorrect ${DARK} ${FLAT} ${IMG} ${TRA} ${EXT}

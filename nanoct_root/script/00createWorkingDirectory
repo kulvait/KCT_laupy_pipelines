@@ -1,0 +1,38 @@
+#!/bin/bash
+# Standard creation of working directory based on raw
+# Comma separated list of samples can be provided with --samples option.
+
+WD_DIR="wd"
+PATTERN=""
+SAMPLES=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --pattern)
+            PATTERN="$2"
+            shift 2
+            ;;
+        --samples)
+	    	SAMPLES=("$2")
+	    	shift 2
+	    	;;
+        *)
+            WD_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
+mkdir -p "$WD_DIR"
+
+CMD=(createWorkingDirectoryForMicrotomography ../../raw/ "$WD_DIR")
+
+if [ -n "$PATTERN" ]; then
+    CMD+=("--pattern" "$PATTERN")
+elif [ ${#SAMPLES[@]} -gt 0 ]; then
+	IFS=',' read -r -a SAMPLE_ARRAY <<< "$SAMPLES"
+	CMD+=("--samples" "${SAMPLE_ARRAY[@]}")
+fi
+
+#createWorkingDirectoryForMicrotomography ../../raw/ "$WD_DIR" 2>&1 | tee "$WD_DIR/createStructure.log"
+"${CMD[@]}" 2>&1 | tee "$WD_DIR/createStructure.log"

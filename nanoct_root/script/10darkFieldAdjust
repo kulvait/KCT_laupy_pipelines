@@ -1,0 +1,49 @@
+#!/bin/bash
+PATH=$PATH:/home/kulvaitv/BIG/KCT_git/pipelines/bin/synchro_edgescan
+PHASECONTRAST=false
+MINIMG=$(awk 'BEGIN {print 1.0/1024.0}')
+
+usage() { echo "Usage: $0 [-m MINIMG, defaults to 1.0/1024.0 ] [-p]" 1>&2; exit 1; }
+
+
+while getopts "m:" o; do
+    case "${o}" in
+        m)
+            MINIMG=${OPTARG}
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+
+function darkFieldCorrect(){
+#    MINFLAT=1.0
+#    MINIMG=$(awk 'BEGIN {print 1.0/1024.0}')
+    DARK=${1%.den}
+    IMG=${2%.den}
+    COR=${3%.den}
+    rm -f ${DARK}_med
+    rm -f ${IMG}_sub
+    ARG="--force -j 32"
+    dentk-framecalc1 --force --median ${DARK}.den ${DARK}_med
+    #dentk-framecalc1 --force --median ${FLAT}.den ${FLAT}_med
+    #dentk-calc ${ARG} --subtract ${FLAT}_med ${DARK}_med ${FLAT}_sub
+    #dentk-calc1 ${ARG} --max ${MINFLAT} ${FLAT}_sub ${FLAT}_cor 
+    dentk-framecalc ${ARG} --subtract ${IMG}.den ${DARK}_med ${IMG}_sub
+    dentk-calc1 ${ARG} --max ${MINIMG} ${IMG}_sub ${COR}.den
+    rm -f ${DARK}_med
+    rm -f ${IMG}_sub
+}
+
+if [ "$#" -ne 3 ]; then
+	echo "Expecting 3 inputs DAR IMG COR"
+fi
+
+DARK=$1
+IMG=$2
+COR=$3
+echo "Starting dark field correction of ${IMG} DAR=${DARK} COR=${COR}"
+darkFieldCorrect ${DARK} ${IMG} ${COR}

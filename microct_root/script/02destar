@@ -1,0 +1,24 @@
+#!/bin/bash
+
+if [ "$#" -ge 1 ]; then
+	cd $1
+fi
+
+destarFile() {
+if [[ ! -f $1 ]]; then
+    echo "File $1 does not exist."
+else
+    echo "START $1 destar."
+	destar.py --filter-size 5 --iterations 5 -j -1 $1 ${1}_destar
+	mv ${1}_destar ${2}
+	rm ${1}	
+    echo "END $1 destar."
+fi
+}
+
+
+echo "02destar $PWD"
+
+destarFile img.den IMG.den
+destarFile dar.den DAR.den
+destarFile ref.den REF.den

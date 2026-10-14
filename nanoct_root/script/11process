@@ -1,0 +1,37 @@
+#!/bin/bash
+PATH=$PATH:/home/kulvaitv/BIG/KCT_git/pipelines/bin/synchro_edgescan
+PHASECONTRAST=false
+
+function flatFieldCorrect(){
+    FLAT=${1%.den}
+    IMG=${2%.den}
+    EXT=${3%.den}
+    rm -f ${FLAT}_cor
+    rm -f ${IMG}_cor
+	rm -f ${EXT}_exp.den
+    rm -f ${EXT}.den
+    ARG="--force -j 32"
+	if [ "$PHASECONTRAST" = true ]; then
+		mv ${IMG}.den ${IMG}_cor
+	else
+		#START does not apply for phase contrast
+    	dentk-calc ${ARG} --min ${IMG}.den ${FLAT}.den ${IMG}_cor
+		#END does not apply for phase contrast
+	fi
+    dentk-calc ${ARG} --divide ${FLAT}.den ${IMG}_cor ${EXT}_exp.den
+    dentk-calc1 ${ARG} --log  ${EXT}_exp.den ${EXT}.den
+    rm -f ${FLAT}_cor
+    rm -f ${IMG}_cor
+	rm -f ${EXT}_exp.den
+}
+
+if [ "$#" -ne 3 ]; then
+	echo "Expecting 3 inputs DAR FLAT IMG TRA EXT"
+	exit 1
+fi
+
+FLAT=$1
+IMG=$2
+EXT=$3
+echo "Starting flat field correction of ${IMG} REF=${FLAT} to produce EXT=${EXT}"
+flatFieldCorrect ${FLAT} ${IMG} ${EXT}

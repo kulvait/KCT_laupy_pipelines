@@ -1,0 +1,159 @@
+laupy project INFO file created by lautools on: 2026-10-05 17:17:30
+Project dir: /asap3/petra3/gpfs/p05/2026/data/11024869/scratch_cc/kct_p05N_BONE_Jost
+Beamline: p05
+Beamline setup: Nanotomography (EH1)
+Beamtime label: p05N_BONE_Jost
+Beamtime root dir: /asap3/petra3/gpfs/p05/2026/data/11024869
+Beamtime ID: 11024869
+Proposal ID: 20010001
+Beamtime PI: —
+Workbench content dir: /data/hereon/wp/user/kulvaitv/KCT_git/pipelines/bin/kct_p05N_BONE_Jost
+Number of samples: 8
+
+-------------------
+Original INFO content follows:
+-------------------
+Use setupPipelineForBeamtime script to generate this file 
+#PATH=$PATH:/data/hereon/wp/group/laupy/bin/
+#setupPipelineForBeamtime
+
+# submitslurm command – key commonly used parameters (see full: submitslurm -h)
+#
+# -w / --working-dir    : Select working subdirectory where the script runs. Default to wd, list of dirs can be provided as comma separated list (e.g. wd1,wd2,wd3) and then the script is scheduled for each of them.
+# -a / --slurmargs      : Pass additional arguments to the generated sbatch scripts.
+# -f / --partition      : Choose partition (e.g. 'com', 'comgpu' for H200 nodes, etc.).
+# -g / --gpu-nodes      : Restrict selection to GPU nodes (type‑agnostic).
+# -e / --excellent-nodes / -s / --strong-nodes : Use only excellent A100+ nodes (-e) or strong CPU nodes (-s).
+# --pipeline-step : Specify integer pipeline step to run (e.g. 1, 2, 3, etc.) given command is then scheduled only if all previous steps are completed. This is for pipelines where each step is dependent on the previous one.
+# -p / --pattern : Restrict selection to subdirectories of wd matching the provided pattern (e.g. '001'). Can be used to match only specific scans from the beamtime.
+
+---------------------------------------------
+Pipeline for reconstruction in nanotomography
+---------------------------------------------
+#Create working directory with samples using eg. lautools-browser, script/00createWorkingDirectory or calling createWorkingDirectoryForMicrotomography
+
+#Create subdirectory dar in each wd folder which shall point to dark field project
+
+#Run diagnostics of the individual scans to see intensity profile or current correction shift
+submitslurm --pipeline-step 0 01scanTimingDiagnostics.sbatch
+
+#Tiff to den format conversion
+submitslurm -a " LogScan.log raw  --foreign-log-file dar/LogScan.log  --foreign-raw-dir dar/raw --compression htj2k --zip --clevel 0 --output-prefix h2k_ll" --pipeline-step 1 01createZarrStructure.sbatch
+
+#Destar of dark fields and zinger removal for flat fields and img produces img/dar/ref_clean.den
+submitslurm --pipeline-step 2 -a " --zar-input-file h2k_ll.zar --suffix _ll_clean" 02destar.sbatch
+
+#Dark field correction
+submitslurm --pipeline-step 3 -a " --img img_ll_clean.den --ref ref_ll_clean.den --dar dar_ll_clean.den --remove-input-files --estimate-snr" 03darkFieldCorrect.sbatch
+
+#Current correction
+#TODO
+submitslurm --pipeline-step 4  -a "--nano-log-file LogScan.log --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den" 05currentCorrect.sbatch
+
+#Estimate regions
+submitslurm --pipeline-step 5 -a " --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den" 05estimateRegions.sbatch
+
+#Compute extinction by standard pipeline
+submitslurm --pipeline-step 6 -a " --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den --out ext_ll.den" 06computeExtinction.sbatch
+
+#Estimate rotation center
+submitslurm --pipeline-step 7 -a " --regions-json ref_ll_clean_darksub.json --nano-log-file LogScan.log ext_ll.den" 07detectRotationCenter180.sbatch
+
+#Create binned data
+submitslurm --pipeline-step 8 -a " ext_ll.den extb2/ext_ll.den" 00bin.sbatch
+
+#SSC filter
+submitslurm --pipeline-step 9 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
+#--sm-size 201 --la-size 301 --snr 2 ... large ring artefacts
+#--sm-size 151 --la-size 251 --snr 2 or --sm-size 101 --la-size 201 for medium size rings
+
+##########################################
+#      Reconstruction                    #
+##########################################
+
+#FBP filter
+#submitslurm --pipeline-step 9 -f allgpu -a " --pad-symm --window-kaiser --window-kaiser-beta 5 extb2/ext_ll_ssc.den extb2/ext_ll_ssc_kaiser.den" 09filterFBP.sbatch
+
+#Backprojection
+#submitslurm  --pipeline-step 10 -s -g -a " --rotation-axis-file ext_ll_rotationcenter180.log extb2/ext_ll_ssc_kaiser.den --backproject --geometry-info LogScan.tck --output-suffix ssc_101" 00reconstructCGLS.sbatch
+
+#CGLS reconstruction
+#submitslurm  --pipeline-step 10 -s -g -a " --rotation-axis-file ext_ll_rotationcenter180.log extb2/ext_ll_ssc.den --geometry-info LogScan.tck" 00reconstructCGLS.sbatch
+
+#CGLS with Bronikov
+cgls_reconstruction() {
+    local REGPAR="$1"
+    local EXTB2="$2"
+    local SUFFIX="${3:-}"
+
+    local BASENAME
+    BASENAME="$(basename "$EXTB2")"
+
+    local STEM="${BASENAME%.*}"
+    local EXT="${BASENAME##*.}"
+
+    local BROB2="extb2/bro${REGPAR}_${STEM}${SUFFIX}.${EXT}"
+    local RECDIR="recb2_cgls_${STEM}"
+    RECDIR="recb2_cgls_bro${REGPAR}_${STEM}${SUFFIX}"
+
+    echo "Starting reconstruction of $EXTB2 with bronikov regpar $REGPAR to produce ${BROB2} and ${RECDIR}"
+
+    submitslurm --pipeline-step 10 -a " -r -f $RECDIR" 00remove.sbatch
+    submitslurm --pipeline-step 10 -a " -f $BROB2" 00remove.sbatch
+    submitslurm --pipeline-step 11 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
+
+
+    local REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck"
+    if [[ -n "$SUFFIX" ]]; then
+        REC_ARG+=" --output-suffix $SUFFIX"
+    fi
+    REC_ARG+=" $BROB2"
+    submitslurm --pipeline-step 12 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
+}
+
+#FBP with Bronikov
+fbp_reconstruction() {
+    local REGPAR="$1"
+    local KAISERPAR="$2"
+    local EXTB2="$3"
+    local SUFFIX="${4:-}"
+
+    local BASENAME
+    BASENAME="$(basename "$EXTB2")"
+    local STEM="${BASENAME%.*}"
+    local EXT="${BASENAME##*.}"
+
+    local BROB2="extb2/bro${REGPAR}_${STEM}${SUFFIX}.${EXT}"
+    local KAIB2="extb2/bro${REGPAR}_kai${KAISERPAR}_${STEM}${SUFFIX}.${EXT}"
+    BASENAME="$(basename "$KAIB2")"
+    STEM="${BASENAME%.*}"
+    EXT="${BASENAME##*.}"
+    local RECDIR="recb2_cgls_${STEM}"
+
+    echo "Starting reconstruction of $EXTB2 with bronikov regpar $REGPAR and kaiser beta ${KAISERPAR} to produce ${BROB2} and ${KAIB2} and ${RECDIR}"
+    submitslurm --pipeline-step 10 -a " -r -f $RECDIR" 00remove.sbatch
+    submitslurm --pipeline-step 10 -a " -f $BROB2" 00remove.sbatch
+    submitslurm --pipeline-step 10 -a " -f $KAIB2" 00remove.sbatch
+
+    submitslurm --pipeline-step 11 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
+    submitslurm --pipeline-step 12 -f allgpu -a " --pad-symm --window-kaiser --window-kaiser-beta ${KAISERPAR} ${BROB2} ${KAIB2}" 09filterFBP.sbatch
+    local REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck --backproject"
+    if [[ -n "$SUFFIX" ]]; then
+        REC_ARG+=" --output-suffix $SUFFIX"
+    fi
+    REC_ARG+=" $KAIB2"
+    submitslurm --pipeline-step 15 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
+}
+
+#Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
+#Closer bronikov regpar to 0 stronger regularization, higher kaiser beta stronger regularization
+#fbp_reconstruction 0.05 5 extb2/ext_ll_ssc.den
+#fbp_reconstruction 0.005 5 extb2/ext_ll_ssc.den
+fbp_reconstruction 0.001 5 extb2/ext_ll_ssc.den #Probably the best
+#fbp_reconstruction 0.0005 5 extb2/ext_ll_ssc.den
+
+#Cleanup
+submitslurm --pipeline-step 19 -a " -f -r extb2 " 00remove.sbatch
+submitslurm --pipeline-step 19 -a " *.den " 00remove.sbatch
+submitslurm --pipeline-step 19 -a " *.zar " 00remove.sbatch
+

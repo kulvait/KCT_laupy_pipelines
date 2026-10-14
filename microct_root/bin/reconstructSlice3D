@@ -1,0 +1,222 @@
+#!/bin/bash
+#To run this script properly needed 
+#source initGanrec
+#or
+#LoadModule python/3.10
+#Detector size is in h5 file when no file is provided
+if [ ! -f ./params ]; then
+    echo "File params not found."
+    exit 1
+fi
+. ./params
+if [[ -z "$PLATFORM" ]]; then #If variable is not defined or empty
+    PLATFORM=0
+fi
+if [[ -z "$ITERATIONS" ]]; then
+    ITERATIONS=40
+fi
+START=$(date +%s.%N)
+SIDON=false
+FDK=false
+ASYNC=false
+WAIT=false
+REPORTKTH=0
+ART=false
+KRYLOV=true
+GLSQR=false
+TIKHONOV=-1.0
+SLICEINDEX=0
+SLICECOUNT=1
+BINNING=2
+INPUTEXT=extb2/ext_tv.den
+DIR=recb2
+
+while getopts 'wp:lt:i:o:sfar:n:x:y:z:b:j:c:' 'OPTKEY'; do
+    case ${OPTKEY} in
+        'i')
+            #Input file
+            INPUTEXT=${OPTARG}
+            ;;
+        'o')
+            #Output dir
+            DIR=${OPTARG}
+            ;;
+        'b')
+            #Binning
+            BINNING=${OPTARG}
+            ;;
+        'j')
+            #Start index
+            SLICEINDEX=${OPTARG}
+            ;;
+        'c')
+            #Binning
+            SLICECOUNT=${OPTARG}
+            ;;
+        'x')
+            # X size of the volume box
+            BOXX=${OPTARG}
+            ;;
+        'y')
+            # Y size of the volume box
+            BOXY=${OPTARG}
+            ;;
+        'z')
+            # Z size of the volume box
+            BOXZ=${OPTARG}
+            ;;
+        'p')
+            # Update the value of the option x flag we defined above
+            PLATFORM=${OPTARG}
+            ASYNC=true
+            ;;
+        'l')
+            # GLSQR
+            KRYLOV=true
+            GLSQR=true
+            ART=false
+            FDK=false
+            ;;
+        'f')
+            KRYLOV=false
+            FDK=true
+            ART=false
+            ;;
+        'a')
+            ART=true
+            KRYLOV=false
+            FDK=false
+            ;;
+        't')
+            TIKHONOV=${OPTARG}
+            ;;
+        's')
+            SIDON=true
+            ;;
+        'w')
+            WAIT=true
+            ;;
+        'r')
+            REPORTKTH=${OPTARG}
+            ;;
+        'n')
+            ITERATIONS=${OPTARG}
+            ;;
+        '?')
+            echo "INVALID OPTION -- ${OPTARG}" >&2
+            exit 1
+            ;;
+        ':')
+            echo "MISSING ARGUMENT for option -- ${OPTARG}" >&2
+            exit 1
+            ;;
+        *)
+            echo "UNIMPLEMENTED OPTION -- ${OPTKEY}" >&2
+            exit 1
+            ;;
+    esac
+done
+shift $(($OPTIND - 1))
+
+mkdir -p ${DIR}
+mkdir -p ${DIR}/log
+INPUTEXTSTR=`basename ${INPUTEXT%%.den}`
+SLICETO=$(calc "${SLICEINDEX}+${SLICECOUNT}")
+if [[ ${SLICECOUNT} == 1 ]]; then
+	FILESUFFIX=$( printf "%05d" ${SLICEINDEX} )
+else
+	FILESUFFIX=$( printf "FROM_%05d_TO_%05d" ${SLICEINDEX} ${SLICETO} )
+fi
+PM="${DIR}/${INPUTEXTSTR}_${FILESUFFIX}.pm"
+INPUTEXTIN="${DIR}/ext_truncated_${FILESUFFIX}.den"
+VOLOUTPREFIX="algvk_${INPUTEXTSTR}_${FILESUFFIX}"
+VOLOUT="${DIR}/${VOLOUTPREFIX}.den"
+TIFOUT="${DIR}/${VOLOUTPREFIX}.tif"
+LOG="${DIR}/log/${VOLOUTPREFIX}.log"
+
+if [[ ! -f $INPUTEXT ]]; then
+	echo "File $INPUTEXT does not exist!"
+	exit 1
+fi
+
+if [[ -f "$VOLOUT" ]]; then
+	echo "File $VOLOUT already exists!"
+	exit 1
+fi
+
+if [[ -f "${TIFOUT}" ]]; then
+	echo "File ${TIFOUT} already exists!"
+	exit 1
+fi
+
+MIDSLICE=$( calc "(${SLICEINDEX}+${SLICETO}-1)/2" )
+createProjectionMatrices.py --force --petra-compatibility-transform --bin-x $BINNING --bin-y $BINNING --detector-sizey $SLICECOUNT --rotation-center-file rotationaxis_EXT_poisson.log --rotation-center-file-fit-y ${MIDSLICE} --override-magnification 9.951541635473134 h5 $PM
+dentk-truncate -j 10 --force --y-from ${SLICEINDEX} --y-to ${SLICETO} ${INPUTEXT} ${INPUTEXTIN}
+
+VOXSIZEXY=$(calc "${BINNING}*${pixel_size_x}")
+VOXSIZEZ=$(calc "${BINNING}*${pixel_size_y}")
+#NVX=$(calc "int(${pdimx}*sqrt(2)/${BINNING})")
+NVX=$(calc "int(${pdimx}/${BINNING})")
+NVY=$NVX
+ARG="--volume-sizex $NVX --volume-sizey $NVY --volume-sizez $SLICECOUNT --voxel-sizex $VOXSIZEXY --voxel-sizey $VOXSIZEXY --voxel-sizez $VOXSIZEZ"
+
+
+prg_sync()
+{
+#Signature $OUTPUTLOG $CMD1 $CMD2 ...
+	STARTX=$(date +%s.%N)
+    OUTPUTLOG=$1
+    shift
+    for PRG in "$@"; do
+        bash -c "$PRG" >> ${OUTPUTLOG}
+    done
+    ENDX=$(date +%s.%N)
+    DIFF=$(echo "$ENDX - $STARTX" | bc)
+    echo "prg_sync time ${DIFF}s"
+}
+
+prg_async()
+{
+#Signature $OUTPUTLOG $CMD1 $CMD2 ...
+    OUTPUTLOG=$1
+    shift
+    DEV=$(redis-cli --raw brpop IDLEGPU 0 | awk '{if(NR>1)print}')
+    ID=$PLATFORM:$DEV
+    for PRG in "$@"; do
+        PRG="${PRG} -p $ID"
+		prg_sync "${OUTPUTLOG}" "${PRG}"
+    done
+    #node=$(redis-cli brpop $PLATFORM 0)
+    #gpurelease $DEV
+    redis-cli lpush IDLEGPU $DEV
+}
+
+
+
+PRG="kct-pb-krylov --force --cvp --cgls --barrier --relaxed $ARG ${INPUTEXTIN} ${PM} ${VOLOUT}"
+
+if [[ "$ASYNC" = true ]]; then
+                prg_async ${LOG} "${PRG}"
+else
+                prg_sync ${LOG} "${PRG}"
+fi
+
+#Single slice tif
+if [[ ${SLICECOUNT} == 1 ]]; then
+	denFilesToTifFiles.py --suffix ${VOLOUTPREFIX} ${VOLOUT} ${DIR}
+	mv "${DIR}/000${VOLOUTPREFIX}.tif" "${TIFOUT}"
+	rm ${VOLOUT}
+fi
+
+
+rm -f ${PM}
+rm -f ${INPUTEXTIN}
+
+if [[ "$ASYNC" = false ]] || [[ "$WAIT" = true ]]; then
+    wait
+    END=$(date +%s.%N)
+    DIFF=$(echo "$END - $START" | bc)
+    echo "reconstructSlice time ${DIFF}s"
+else
+    echo "Can not compute running time as this call is not waiting to subprocesses!"
+fi
