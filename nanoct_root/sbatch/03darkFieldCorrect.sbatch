@@ -83,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Check required args
 if [[ -z "${WD:-}" ]]; then
     echo "Error: Missing required positional arguments." >&2
     usage error
@@ -96,6 +97,7 @@ fi
 
 cd "$WD" || { echo "Failed to cd into $WD"; exit 1; }
 
+#Start script
 ARG="--force -j -1"
 
 testExistence() {
@@ -119,11 +121,13 @@ darkFieldCorrect() {
         exit 1
     fi
 
+    # Create temporary working directory
     tmpdir=$(mktemp -d -p . darkfield_temp_XXXX)
     echo "Using temporary directory: $tmpdir"
     dark_med="$tmpdir/dark_med.den"
     dentk-framecalc1 $ARG --median "$darkfield" "$dark_med"
 
+    # Loop through input/output pairs
     for ((i=0; i<${#inputs[@]}; i++)); do
         input="${inputs[$i]}"
         output="${outputs[$i]}"
@@ -138,21 +142,23 @@ darkFieldCorrect() {
         dentk-calc1 $ARG --double-softplus "$input_sub" "$output"
     done
 
+    # Clean up temporary directory
     echo "Cleaning up temporary directory: $tmpdir"
     rm -rf "$tmpdir"
 }
 
 mkdir -p log
 
+# Add _clean suffix to the input files
 inputs=("$IMG" "$REF")
 suffix="_darksub"
 darkfield="$DARK"
 outputs=()
 
 for input in "${inputs[@]}"; do
-    base="${input%.*}"
-    ext="${input##*.}"
-    output="${base}${suffix}.${ext}"
+    base="${input%.*}"            # Remove .den extension
+    ext="${input##*.}"            # Get extension (den)
+    output="${base}${suffix}.${ext}"  # Append suffix before extension
     outputs+=("$output")
 done
 
@@ -168,6 +174,7 @@ if [[ $KEEP_INPUT_FILES == false ]]; then
     rm "$darkfield"
 fi
 
+# End body of the script
 end_time=$(date +%s)
 elapsed_time=$((end_time - start_time))
 hours=$((elapsed_time / 3600))
