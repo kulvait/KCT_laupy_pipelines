@@ -75,7 +75,7 @@ done
 
 
 # Check if the number of parameters is 3
-if [ -z "$WD" ] || [ -z "SOURCE" ] || [ -z "$TARGET" ]; then
+if [ -z "$WD" ] || [ -z "$SOURCE" ] || [ -z "$TARGET" ]; then
     echo "Error: Missing required arguments" >&2
     usage error
     exit 1

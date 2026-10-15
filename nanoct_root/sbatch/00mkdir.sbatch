@@ -76,12 +76,14 @@ done
 # Check if the number of parameters is 2
 if [ -z "$WD" ] || [ -z "$DIR" ]; then
     echo "Error: Missing required arguments" >&2
-    usage
+    usage error
+    exit 1
 fi
 
 # Check if WD is a directory
 if [ ! -d "$WD" ]; then
     echo "Error: $WD is not a directory" >&2
+    usage error
     exit 1
 fi
 

@@ -13,9 +13,6 @@ trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 echo "START ${jobname} $*"
 start_time=$(date +%s)
 
-unset LD_PRELOAD
-source initGanrec
-
 # Positional arguments
 WD=""
 IN=""
@@ -147,6 +144,8 @@ fi
 
 echo "START $scriptname $WD $IN $OUT" | tee /dev/stderr
 
+unset LD_PRELOAD
+source initGanrec
 
 ARG=(--force)
 ARG+=("--bin-x" "$BNX")

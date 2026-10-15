@@ -106,13 +106,17 @@ if [[ ! -d "$TARGET_DIR" ]]; then
     mkdir -p "$TARGET_DIR"
 fi
 
-CMD="ln -s"
+SOURCE_ABSOLUTE=$(realpath -e -- "$SOURCE")
+
+CMD=(ln -sT)
 if [[ "$FORCE" == true ]]; then
-    CMD="ln -sf"
+    CMD+=(-f)
 fi
 
-echo "Executing: $CMD \"$SOURCE\" \"$TARGET\""
-$CMD "$SOURCE" "$TARGET"
+printf 'Executing:'
+printf ' %q' "${CMD[@]}" -- "$SOURCE_ABSOLUTE" "$TARGET"
+printf '\n'
+"${CMD[@]}" -- "$SOURCE_ABSOLUTE" "$TARGET"
 
 end_time=$(date +%s)
 elapsed_time=$((end_time - start_time))

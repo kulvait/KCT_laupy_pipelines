@@ -79,14 +79,16 @@ EXTBASE=${EXT%.den}
 PAGIN=${EXTBASE}_nt.den
 
 
-# Check if REGULARIZATION is positive float
-if ! [[ "$REGULARIZATION" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-    echo "Error: REGULARIZATION is not a positive float" >&2
+# Check if REGULARIZATION is a positive float
+if ! [[ "$REGULARIZATION" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]; then
+    echo "Error: REGULARIZATION must be a number" >&2
     exit 1
-	if [ "$REGULARIZATION" -le 0 ]; then
-		echo "Error: REGULARIZATION is not a positive float" >&2
-		exit 1
-	fi
+fi
+
+# Check if REGULARIZATION > 0
+if ! awk -v n="$REGULARIZATION" 'BEGIN { exit !(n > 0) }'; then
+    echo "Error: REGULARIZATION must be positive" >&2
+    exit 1
 fi
 
 echo "START $scriptname $WD $EXT" | tee /dev/stderr
@@ -110,7 +112,7 @@ function createPagInput()
 		echo "Created ${TMP}/neg_tra.den"
 	else
 		echo "Error creating ${PAGIN} check directory ${TMP}" | tee /dev/stderr
-		exit - 1
+		exit 1
 	fi
 }
 

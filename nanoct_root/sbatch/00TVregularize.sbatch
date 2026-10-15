@@ -277,7 +277,7 @@ else
 	for file in "${TIF_FILES[@]}"; do
 	    FULL_PATHS+=("${INPUT}/${file}")
 	done
-	tiffImagesToDenStack.py --float32 ${FULL_PATHS[@]} "$INPUT_FILE"
+    tiffImagesToDenStack.py --float32 "${FULL_PATHS[@]}" "$INPUT_FILE"
 fi
 
 # If OUTPUT ends with .den, we will save output as single DEN file, otherwise we will save as TIFF stack in the specified directory
@@ -302,13 +302,14 @@ elif [[ -f "$OUTPUT_FILE" ]] && [[ "$FORCE" == true ]]; then
 fi
 
 if [[ -n "$OUTPUT" ]]; then
-	if [[ "$FORCE" == true ]]; then
-		rm -rf "$OUTPUT"
-		mkdir -p "$OUTPUT"
-	else
-		echo "Error: Output directory $OUTPUT already exists! Use --force to overwrite." >&2
-		exit 1
-	fi
+    if [[ -e "$OUTPUT" || -L "$OUTPUT" ]]; then
+        if [[ "$FORCE" != true ]]; then
+            echo "Error: Output path $OUTPUT already exists! Use --force to overwrite." >&2
+            exit 1
+        fi
+        rm -rf "$OUTPUT"
+    fi
+    mkdir -p -- "$OUTPUT"
 fi
 
 CMD=(
@@ -339,8 +340,7 @@ if [[ -n "$OUTPUT" ]]; then
 	denFilesToTifFiles.py --prefix "$TIFPREFIX" "$OUTPUT_FILE" "$OUTPUT"
 fi
 
-rm -rf $TMPDIR
-
+rm -rf -- "$TMPDIR"
 
 # End body of the script
 end_time=$(date +%s)

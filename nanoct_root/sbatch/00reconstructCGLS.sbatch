@@ -72,6 +72,14 @@ The default rotation-axis filename is literal: rotationaxis_EXT_360.log.
 EOF
 }
 
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
+}
+
 # Parse options
 while [[ $# -gt 0 ]]; do
     key="$1"
@@ -81,50 +89,42 @@ while [[ $# -gt 0 ]]; do
 	    	shift
 	    	;;
 		--binning)
+            require_value "$1" "${2:-}"
 		    BINNING="$2"
-	    	shift
-	    	shift
+	    	shift 2
 	    	;;
         -m)
+            require_value "$1" "${2:-}"
             MAGNIFICATION="$2"
-            shift
-            shift
+            shift 2
             ;;
         -o)
+            require_value "$1" "${2:-}"
             COR_ADDITIONALOFFSET_PIX="$2"
-            shift
-            shift
+            shift 2
             ;;
         --rotation-axis-file)
+            require_value "$1" "${2:-}"
             ROTATIONAXISFILE="$2"
-            shift
-            shift
+            shift 2
             ;;
         --pwls-vector)
-			if [ -n "$2" ] && [[ "$2" != -* ]]; then
-				PWLS_VECTOR="$2"
-				shift 2
-			else
-				echo "Error: --pwls-vector option requires an argument." >&2
-				usage error
-				exit 1
-			fi
+            require_value "$1" "${2:-}"
+			PWLS_VECTOR="$2"
+			shift 2
 	    	;;
 		--geometry-info)
-			if [ -n "$2" ] && [[ "$2" != -* ]]; then
-				GEOMETRY_INFO_FILE="$2"
-				shift 2
-			else
-				echo "Error: --geometry-info option requires an argument." >&2
-				usage error
-				exit 1
-			fi
+            require_value "$1" "${2:-}"
+			GEOMETRY_INFO_FILE="$2"
+			shift 2
 	    	;;
         --output-prefix)
+            require_value "$1" "${2:-}"
 	    	OUTPUT_PREFIX="$2"
 	    	shift 2
 	    	;;
 		--output-suffix)
+            require_value "$1" "${2:-}"
 	    	OUTPUT_SUFFIX="$2"
 			shift 2
 	    	;;
@@ -137,14 +137,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --volume-sizex)
+            require_value "$1" "${2:-}"
             BOXX="$2"
-            shift
-            shift
+            shift 2
             ;;
         --volume-sizey)
+            require_value "$1" "${2:-}"
             BOXY="$2"
-            shift
-            shift
+            shift 2
             ;;
 		--straight-rotation-axis)
 		    STRAIGHT_ROTATION_AXIS=true
@@ -378,7 +378,7 @@ run_job() {
     (
         exit_code=0
 
-        reconstructSlice2D ${ARG[@]} \
+        reconstructSlice2D "${ARG[@]}" \
             --start-index "$start_index" \
             --slice-count "$slice_count" \
         || exit_code=$?

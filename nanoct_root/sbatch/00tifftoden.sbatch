@@ -14,8 +14,6 @@ trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 echo "START ${jobname} $*"
 start_time=$(date +%s)
 
-scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
-
 usage() {
     local mode="${1:-help}"
     local out=1
@@ -60,9 +58,9 @@ if [[ ! -d "$WD" ]]; then
     echo "Error: Working directory does not exist: $WD" >&2
     exit 1
 fi
+cd "$WD"
 
 source initGanrec
-cd "$WD"
 
 #Remove previsous
 #Exit if dar.den and img.den and ref.den exist

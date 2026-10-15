@@ -7,8 +7,9 @@
 #SBATCH --partition=allcpu
 
 set -euo pipefail
-scriptname="${PIPELINE_JOBNAME:-$(basename "$0")}"
-trap 'echo "[$(date)] ERROR in ${scriptname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
+scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
+jobname="${PIPELINE_JOBNAME:-$(basename "$0")}"
+trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 # Initialize positional arguments
 WD=""
