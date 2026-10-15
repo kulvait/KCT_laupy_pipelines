@@ -36,20 +36,23 @@ submitslurm --pipeline-step 3 -a " --img img_ll_clean.den --ref ref_ll_clean.den
 #Current correction
 submitslurm --pipeline-step 4  -a "--nano-log-file LogScan.log --nano-image-dir raw --force --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den" 05currentCorrect.sbatch
 
+#Field statistics, including SNR and photon statistics ... required for 05estimateRegions
+submitslurm --pipeline-step 5 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den" 05estimateFieldStatistics.sbatch
+
 #Estimate regions
-submitslurm --pipeline-step 5 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den" 05estimateRegions.sbatch
+submitslurm --pipeline-step 6 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den" 05estimateRegions.sbatch
 
 #Compute extinction by standard pipeline
-submitslurm --pipeline-step 6 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den" 06computeExtinction.sbatch
+submitslurm --pipeline-step 7 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den" 06computeExtinction.sbatch
 
 #Estimate rotation center
-submitslurm --pipeline-step 7 -a " --regions-json ref_ll_clean_darksub.json --nano-log-file LogScan.log ext_ll.den" 07detectRotationCenter180.sbatch
+submitslurm --pipeline-step 8 -a " --regions-json ref_ll_clean_darksub_curcor.json --nano-log-file LogScan.log ext_ll.den" 07detectRotationCenter180.sbatch
 
 #Create binned data
-submitslurm --pipeline-step 8 -a " ext_ll.den extb2/ext_ll.den" 00bin.sbatch
+submitslurm --pipeline-step 9 -a " ext_ll.den extb2/ext_ll.den" 00bin.sbatch
 
 #SSC filter
-submitslurm --pipeline-step 9 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
+submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
 #--sm-size 201 --la-size 301 --snr 2 ... large ring artefacts
 #--sm-size 151 --la-size 251 --snr 2 or --sm-size 101 --la-size 201 for medium size rings
 
