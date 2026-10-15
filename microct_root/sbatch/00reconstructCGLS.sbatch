@@ -80,6 +80,11 @@ require_value() {
     fi
 }
 
+calc() {
+	awk "BEGIN { print $* }"
+}
+export -f calc
+
 # Parse options
 while [[ $# -gt 0 ]]; do
     key="$1"
