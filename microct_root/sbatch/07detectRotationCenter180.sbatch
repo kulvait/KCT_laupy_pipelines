@@ -3,10 +3,8 @@
 #SBATCH --nodes=1
 #SBATCH --requeue
 #SBATCH --partition=allcpu,allgpu
-#SBATCH --job-name=07detectRotationCenter180_marius
 #SBATCH --output=log/07detectRotationCenter180-%N-%j.out
 #SBATCH --error=log/07detectRotationCenter180-%N-%j.err
-# --- Default ext filename ---
 
 set -euo pipefail
 scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
@@ -117,10 +115,7 @@ fi
 
 cd "$WD" || { echo "Failed to cd into $WD"; exit 1; }
 
-
-# --- Load environment ---
 source initGanrec
-
 
 # --- Prepare output directories and filenames ---
 LOGDIR="log/detectRotationCenter"
