@@ -2,13 +2,14 @@
 #SBATCH --time=0-1:00:00
 #SBATCH --nodes=1
 #SBATCH --requeue
-#SBATCH --output=log/00remove-%N-%j.out
-#SBATCH --error=log/00remove-%N-%j.err
+#SBATCH --output=log/00mkdir-%N-%j.out
+#SBATCH --error=log/00mkdir-%N-%j.err
 #SBATCH --partition=allcpu
 
 set -euo pipefail
-scriptname="${PIPELINE_JOBNAME:-$(basename "$0")}"
-trap 'echo "[$(date)] ERROR in ${scriptname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
+scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
+jobname="${PIPELINE_JOBNAME:-$(basename "$0")}"
+trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 # Initialize positional arguments
 WD=""
@@ -19,15 +20,24 @@ PARENTS=false
 
 # Function to print usage and exit
 usage() {
-    echo "Usage: $0 [-r] [-f] <WD> <FILE>" >&2
-    echo
-    echo "Options:"
-    echo "  -p      		Create parent directories as needed"
-    echo
-    echo "Positional arguments:"
-    echo "  WD                          Working directory"
-    echo "  DIR                         Directory to create"
-    exit 1
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: ${scriptname} [OPTIONS] <WD> <DIR>
+
+Create a directory.
+
+Options:
+  -p                          Create missing parent directories; allow DIR to exist.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  DIR                         Directory to create, relative to WD or absolute.
+EOF
 }
 
 # Parse options
@@ -38,12 +48,14 @@ while [[ $# -gt 0 ]]; do
             PARENTS=true
             shift
             ;;
-        -h|--help)
-	        usage
+        -h|--h|--help)
+	        usage help
+			exit 0
 	    	;;
         -*)
             echo "Unknown option $1" >&2
-            usage
+            usage error
+			exit 1
             ;;
         *)
             if [ -z "$WD" ]; then
@@ -52,7 +64,8 @@ while [[ $# -gt 0 ]]; do
                 DIR="$1"
             else
                 echo "Unexpected argument: $1" >&2
-                usage
+                usage error
+				exit 1
             fi
             shift
             ;;

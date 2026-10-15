@@ -24,7 +24,7 @@ PDHG_MU=-0.02
 PDHG_SIGMA=-0.2
 PDHG_TAU=-0.2
 GRADIENT="--gradient-forward-3point"  # Default gradient
-PLATFORM_ID=$(platformID)  # Fetch the platformID using the program
+PLATFORM_ID=""
 KEEP_DEN=false
 DEN_OUTPUT=false
 FORCE=false
@@ -37,12 +37,15 @@ usage() {
         out=2
     fi  
     cat <<EOF >&${out}
-Usage: $(basename "$0") [OPTIONS] <WD> <INPUT> <OUTPUT>
+Usage: ${scriptname} [OPTIONS] <WD> <INPUT> <OUTPUT>
 
 Positional arguments:
-  WD                          Working directory (required)
-  INPUT                   Directory with input reconstruction files (TIFF format) or a single .den file (required)
-  OUTPUT                  Directory to save the output as TIFF, when suffix .den is used, it will save as single DEN file (required)
+  WD                         Existing working directory.
+  INPUT                      Directory containing .tif files, or a single DEN file.
+  OUTPUT                     TIFF output directory, or DEN output file ending in .den.
+
+
+Relative INPUT and OUTPUT paths are interpreted from WD.
 
 Options:
   -i MAX_ITERATIONS           Set maximum iterations (default: $MAX_ITERATIONS_PDHG)
@@ -61,9 +64,9 @@ Options:
 			     --gradient-forward-7point
 			     --gradient-central-3point
 			     --gradient-central-5point
-  --keep-den                  Keep intermediate .den file (default: false)
+  --keep-den                  With TIFF output, also save OUTPUT.den (default: false)
   --force                     Force overwrite of existing output (default: false)
-  --h, --help                  Show this help message and exit
+   -h, --h, --help             Show this help message and exit successfully
 EOF
 }
 
@@ -190,6 +193,9 @@ fi
 unset LD_PRELOAD
 source initGanrec
 
+if [[ -z "$PLATFORM_ID" ]]; then
+	PLATFORM_ID=$(platformID)  # Fetch the platformID using the program
+fi
 
 # Record the start time
 start_time=$(date +%s)

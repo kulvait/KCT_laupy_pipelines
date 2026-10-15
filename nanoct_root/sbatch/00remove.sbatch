@@ -20,16 +20,29 @@ FORCE=false
 
 # Function to print usage and exit
 usage() {
-    echo "Usage: $0 [-r] [-f] <WD> <FILE>" >&2
-    echo
-    echo "Options:"
-    echo "  -r                          Remove recursively"
-    echo "  -f                          Force removal"
-    echo
-    echo "Positional arguments:"
-    echo "  WD                          Working directory"
-    echo "  FILE                         Input file extension or name"
-    exit 1
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: ${scriptname} [OPTIONS] <WD> <FILE>
+
+Remove files or directories.
+
+Options:
+  -r                          Remove directories recursively.
+  -f                          Force removal; ignore nonexistent files.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  FILE                        File, directory, or quoted wildcard pattern to remove.
+
+Relative FILE paths are interpreted from WD.
+Quote wildcard patterns to defer their expansion until after changing to WD.
+An unmatched wildcard pattern produces a warning and exits successfully.
+EOF
 }
 
 # Parse options
@@ -44,9 +57,14 @@ while [[ $# -gt 0 ]]; do
             RECURSIVE=true
             shift
             ;;
+        -h|--h|--help)
+	    	usage help
+	    	exit 0
+	    	;;
         -*)
             echo "Unknown option $1" >&2
-            usage
+            usage error
+            exit 1
             ;;
         *)
             if [ -z "$WD" ]; then
@@ -55,7 +73,8 @@ while [[ $# -gt 0 ]]; do
                 FILE="$1"
             else
                 echo "Unexpected argument: $1" >&2
-                usage
+                usage error
+				exit 1
             fi
             shift
             ;;

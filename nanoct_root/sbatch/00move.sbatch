@@ -7,8 +7,9 @@
 #SBATCH --partition=allcpu
 
 set -euo pipefail
-scriptname="${PIPELINE_JOBNAME:-$(basename "$0")}"
-trap 'echo "[$(date)] ERROR in ${scriptname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
+scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
+jobname="${PIPELINE_JOBNAME:-$(basename "$0")}"
+trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 # Initialize positional arguments
 WD=""
@@ -19,15 +20,26 @@ TARGET=""
 
 # Function to print usage and exit
 usage() {
-    echo "Usage: $0 <WD> <SOURCE> <TARGET>" >&2
-    echo
-    echo "Options:"
-    echo
-    echo "Positional arguments:"
-    echo "  WD                          Working directory"
-    echo "  FILE                        Source to rename"
-    echo "  TARGET                      Target name"
-    exit 1
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: ${scriptname} [OPTIONS] <WD> <SOURCE> <TARGET>
+
+Move or rename a file or directory.
+
+Options:
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  SOURCE                      Source file or directory.
+  TARGET                      Destination name or existing destination directory.
+
+Relative SOURCE and TARGET paths are interpreted from WD.
+EOF
 }
 
 # Parse options
@@ -36,8 +48,13 @@ while [[ $# -gt 0 ]]; do
     case $key in
         -*)
             echo "Unknown option $1" >&2
-            usage
+            usage error
+			exit 1
             ;;
+		-h|--h|--help)
+	    	usage help
+	    	exit 0
+	    	;;
         *)
             if [ -z "$WD" ]; then
                 WD="$1"
@@ -48,7 +65,8 @@ while [[ $# -gt 0 ]]; do
 		        TARGET="$1"
             else
                 echo "Unexpected argument: $1" >&2
-                usage
+                usage error
+				exit 1
             fi
             shift
             ;;
@@ -58,7 +76,9 @@ done
 
 # Check if the number of parameters is 3
 if [ -z "$WD" ] || [ -z "SOURCE" ] || [ -z "$TARGET" ]; then
-    usage
+    echo "Error: Missing required arguments" >&2
+    usage error
+    exit 1
 fi
 
 # Check if WD is a directory

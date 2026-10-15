@@ -2,6 +2,8 @@
 #SBATCH --time=0-23:00:00
 #SBATCH --nodes=1
 #SBATCH --requeue
+#SBATCH --output=log/00denToZarr-%N-%j.out
+#SBATCH --error=log/00denToZarr-%N-%j.err
 
 set -euo pipefail
 scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
@@ -22,19 +24,24 @@ usage() {
     local out=1
     if [[ "$mode" == "error" ]]; then
         out=2
-    fi  
+    fi
     cat <<EOF >&${out}
 Usage: ${scriptname} [OPTIONS] <WD> <INPUT_FILE> <OUTPUT_FILE>
 
-Options:
-  --force                     Overwrite existing output file if it exists.
-  --delete-input-den          Delete the input .den file after successful conversion.
-  --h, --help                 Show this help message and exit.
+Convert a DEN file to ZIP-backed Zarr v3 output.
 
-Positional Arguments:
-  WD                          Working directory where the conversion will be performed.
-  INPUT_FILE                  Path to the input .den file to be converted.
-  OUTPUT_FILE                 Path where the output .zarr file will be saved.
+Options:
+  --force                     Overwrite existing output.
+  --delete-input-den          Delete INPUT_FILE only after successful conversion.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  INPUT_FILE                  Input DEN file.
+  OUTPUT_FILE                 Output Zarr archive path.
+
+Relative input and output paths are interpreted from WD.
+Missing output parent directories are created automatically.
 EOF
 }
 

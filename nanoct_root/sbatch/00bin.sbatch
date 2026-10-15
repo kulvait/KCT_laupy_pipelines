@@ -32,38 +32,56 @@ usage() {
     local out=1
     if [[ "$mode" == "error" ]]; then
         out=2
-    fi  
+    fi
     cat <<EOF >&${out}
-Usage: ${scriptname} [options] <WD> <IN> <OUT>
+Usage: ${scriptname} [OPTIONS] <WD> <IN> <OUT>
 
-Positional arguments:
-  WD                          Working directory
-  IN                          Input file (extension or name)
-  OUT                         Output file name (extension or name)
+Bin a DEN file. Median binning is used unless --average is specified.
 
 Options:
+  --bin FACTOR                Default binning factor for both axes (default: 2).
+  --bin-x FACTOR              Override the X-axis factor (default: --bin value).
+  --bin-y FACTOR              Override the Y-axis factor (default: --bin value).
+  --average                   Use average instead of median binning.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  IN                          Input DEN file.
+  OUT                         Output DEN file; existing output is overwritten.
+
+Relative IN and OUT paths are interpreted from WD.
+Missing output parent directories are created automatically.
 EOF
 }
 
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
+}
 
 
 # Parse options
 while [[ $# -gt 0 ]]; do
     key="$1"
-
     case $key in
         --bin-x)
+			require_value "$@"
 	    	BNX="$2"
-            shift
+            shift 2
             ;;
         --bin-y)
+			require_value "$@"
 	    	BNY="$2"
-            shift
+            shift 2
             ;;
         --bin)
+			require_value "$@"
             BIN="$2"
-            shift
-            shift
+            shift 2
             ;;
 		--average)
 		    AVERAGE=true
@@ -125,7 +143,6 @@ fi
 
 echo "START $scriptname $WD $IN $OUT" | tee /dev/stderr
 
-source initGanrec
 
 ARG=(--force)
 ARG+=("--bin-x" "$BNX")

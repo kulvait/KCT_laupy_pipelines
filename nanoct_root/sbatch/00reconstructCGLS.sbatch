@@ -40,32 +40,36 @@ usage() {
     local out=1
     if [[ "$mode" == "error" ]]; then
         out=2
-    fi  
+    fi
     cat <<EOF >&${out}
 Usage: ${scriptname} [OPTIONS] <WD> <EXT>
 
-Options:
-  --backproject               Perform only backprojection instead of full reconstruction
-  --binning UINT              Binning factor for reconstruction (default: $BINNING)
-  --geometry-info FILE        Set path to geometry file info (default: h5)
-  -m MAGNIFICATION            Set magnification (default: none)
-  -o OFFSET                   Set COR additional offset in pixels (default: 0.0)
-  --pwls-vector FILE          Set path to PWLS vector file (default: none)
-  --rotation-axis-file FILE   Set path to rotation axis file (default: rotationaxis_<EXT>_360.log)
-  --straight-rotation-axis    Assume straight rotation axis, no skew fit (default: false)
-  --volume-sizex BOXX         Set the X dimension of the volume box (default: none)
-  --volume-sizey BOXY         Set the Y dimension of the volume box (default: none)
-  --output-prefix PREFIX      Set prefix for output files (default: recb2)
-  --output-suffix SUFFIX      Set suffix for output files (default: none)
-  -u,--keep-input-files       Keep intermediate input files after reconstruction (default: false)
-  -v,--den-output             Output reconstructed volume as .den files instead of .tif (default: false)
-  -h, --help                  Show this help message and exit.
+Reconstruct an extinction DEN file using CGLS, or perform backprojection only.
 
-Positional Arguments:
-  WD                          Working directory
-  EXT                         Input file extension or name
+Options:
+  --backproject               Perform backprojection only.
+  --binning UINT              Binning factor (default: 2).
+  --geometry-info FILE        Geometry information path (default: h5).
+  -m MAGNIFICATION            Override magnification (default: not specified).
+  -o OFFSET                   Additional COR offset in pixels (default: 0.0).
+  --pwls-vector FILE          PWLS vector file (default: not specified).
+  --rotation-axis-file FILE   Rotation-axis file (default: rotationaxis_EXT_360.log).
+  --straight-rotation-axis    Assume a straight rotation axis without skew fitting.
+  --volume-sizex SIZE         Override volume X size.
+  --volume-sizey SIZE         Override volume Y size.
+  --output-prefix PREFIX      Output prefix (default: recb<BINNING>).
+  --output-suffix SUFFIX      Append a suffix to the generated output name.
+  -u, --keep-input-files      Keep intermediate input files.
+  -v, --den-output            Produce DEN output instead of TIFF output.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory containing params.
+  EXT                         Input extinction DEN file.
+
+Relative file paths are interpreted from WD.
+The default rotation-axis filename is literal: rotationaxis_EXT_360.log.
 EOF
-    exit 1
 }
 
 # Parse options
@@ -124,11 +128,11 @@ while [[ $# -gt 0 ]]; do
 	    	OUTPUT_SUFFIX="$2"
 			shift 2
 	    	;;
-        -u,--keep-input-files)
+        -u|--keep-input-files)
             KEEPINPUTFILES=true
             shift
             ;;
-        -v,--den-output)
+        -v|--den-output)
             TIFFOUTPUT=false
             shift
             ;;
@@ -146,7 +150,7 @@ while [[ $# -gt 0 ]]; do
 		    STRAIGHT_ROTATION_AXIS=true
 	    	shift
 	    	;;
-		--h|--help)
+		-h|--h|--help)
 	    	usage help
 	    	exit 0
 	    	;;

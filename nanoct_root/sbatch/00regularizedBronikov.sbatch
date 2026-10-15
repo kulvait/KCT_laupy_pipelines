@@ -15,12 +15,43 @@ start_time=$(date +%s)
 
 # Function to print usage and exit
 usage() {
-    echo "Usage: $0 <WD> <REGULARIZATION> <EXT> <PAG>" >&2
-    exit 1
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: ${scriptname} <WD> <REGULARIZATION> <EXT> <PAG>
+       ${scriptname} -h|--h|--help
+
+Apply regularized Bronikov processing.
+
+Options:
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  REGULARIZATION              Regularization coefficient passed as --epsilon.
+  EXT                         Input extinction DEN file.
+  PAG                         Output processed DEN file; output is forced.
+
+Relative EXT and PAG paths are interpreted from WD.
+EOF
 }
 
-if [ "$#" -ne 4 ]; then
-    usage
+for arg in "$@"; do
+    case "$arg" in
+        -h|--h|--help)
+            usage help
+            exit 0
+            ;;
+    esac
+done
+
+if [[ $# -ne 4 ]]; then
+    echo "Error: Expected WD, REGULARIZATION, EXT, and PAG." >&2
+    usage error
+    exit 1
 fi
 
 # Assign parameters to variables
