@@ -194,7 +194,7 @@ if [ ! -d "$WD" ]; then
     exit 1
 fi
 
-cd $WD
+cd "$WD" || { echo "Error: Failed to change directory to $WD" >&2; exit 1; }
 
 # Check if EXT exists
 if [ ! -f "$EXT" ]; then
@@ -238,7 +238,7 @@ pixel_size_x=${pixel_size_x:-1}
 PIXELSIZE=$(calc "${pixel_size_x}*${BINNING}")
 ADDITIONALOFFSET=$(calc "${COR_ADDITIONALOFFSET_PIX}*${PIXELSIZE}")
 
-EXTBASE=$(basename $EXT)
+EXTBASE=$(basename "$EXT")
 EXTBASE=${EXTBASE%.*}
 
 if [[ "$BACKPROJECT_ONLY" != true ]]; then
@@ -255,16 +255,16 @@ if [[ -n ${OUTPUT_SUFFIX} ]]; then
 	OUT=${OUT}_${OUTPUT_SUFFIX}
 fi
 
-if [ ! -f $EXT ]; then
-	echo "FIle $EXT does not exist!"
+if [ ! -f "$EXT" ]; then
+	echo "File $EXT does not exist!"
 	exit 1
 fi
 
 SLICECOUNT=16
 
-DIMX=$(dentk-info --dim $EXT  | cut -f1)
-DIMY=$(dentk-info --dim $EXT  | cut -f2)
-DIMZ=$(dentk-info --dim $EXT  | cut -f3)
+DIMX=$(dentk-info --dim "$EXT"  | cut -f1)
+DIMY=$(dentk-info --dim "$EXT"  | cut -f2)
+DIMZ=$(dentk-info --dim "$EXT"  | cut -f3)
 FROM=0
 TO=$( calc "${DIMY}-1" )
 #FROM=$suggested_minindex

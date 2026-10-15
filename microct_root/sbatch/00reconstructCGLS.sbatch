@@ -40,32 +40,44 @@ usage() {
     local out=1
     if [[ "$mode" == "error" ]]; then
         out=2
-    fi  
+    fi
     cat <<EOF >&${out}
 Usage: ${scriptname} [OPTIONS] <WD> <EXT>
 
-Options:
-  --backproject               Perform only backprojection instead of full reconstruction
-  --binning UINT              Binning factor for reconstruction (default: $BINNING)
-  --geometry-info FILE        Set path to geometry file info (default: h5)
-  -m MAGNIFICATION            Set magnification (default: none)
-  -o OFFSET                   Set COR additional offset in pixels (default: 0.0)
-  --pwls-vector FILE          Set path to PWLS vector file (default: none)
-  --rotation-axis-file FILE   Set path to rotation axis file (default: rotationaxis_<EXT>_360.log)
-  --straight-rotation-axis    Assume straight rotation axis, no skew fit (default: false)
-  --volume-sizex BOXX         Set the X dimension of the volume box (default: none)
-  --volume-sizey BOXY         Set the Y dimension of the volume box (default: none)
-  --output-prefix PREFIX      Set prefix for output files (default: recb2)
-  --output-suffix SUFFIX      Set suffix for output files (default: none)
-  -u,--keep-input-files       Keep intermediate input files after reconstruction (default: false)
-  -v,--den-output             Output reconstructed volume as .den files instead of .tif (default: false)
-  -h, --help                  Show this help message and exit.
+Reconstruct an extinction DEN file using CGLS, or perform backprojection only.
 
-Positional Arguments:
-  WD                          Working directory
-  EXT                         Input file extension or name
+Options:
+  --backproject               Perform backprojection only.
+  --binning UINT              Binning factor (default: 2).
+  --geometry-info FILE        Geometry information path (default: h5).
+  -m MAGNIFICATION            Override magnification (default: not specified).
+  -o OFFSET                   Additional COR offset in pixels (default: 0.0).
+  --pwls-vector FILE          PWLS vector file (default: not specified).
+  --rotation-axis-file FILE   Rotation-axis file (default: rotationaxis_EXT_360.log).
+  --straight-rotation-axis    Assume a straight rotation axis without skew fitting.
+  --volume-sizex SIZE         Override volume X size.
+  --volume-sizey SIZE         Override volume Y size.
+  --output-prefix PREFIX      Output prefix (default: recb<BINNING>).
+  --output-suffix SUFFIX      Append a suffix to the generated output name.
+  -u, --keep-input-files      Keep intermediate input files.
+  -v, --den-output            Produce DEN output instead of TIFF output.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory containing params.
+  EXT                         Input extinction DEN file.
+
+Relative file paths are interpreted from WD.
+The default rotation-axis filename is literal: rotationaxis_EXT_360.log.
 EOF
-    exit 1
+}
+
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
 }
 
 # Parse options
@@ -77,76 +89,68 @@ while [[ $# -gt 0 ]]; do
 	    	shift
 	    	;;
 		--binning)
+            require_value "$1" "${2:-}"
 		    BINNING="$2"
-	    	shift
-	    	shift
+	    	shift 2
 	    	;;
         -m)
+            require_value "$1" "${2:-}"
             MAGNIFICATION="$2"
-            shift
-            shift
+            shift 2
             ;;
         -o)
+            require_value "$1" "${2:-}"
             COR_ADDITIONALOFFSET_PIX="$2"
-            shift
-            shift
+            shift 2
             ;;
         --rotation-axis-file)
+            require_value "$1" "${2:-}"
             ROTATIONAXISFILE="$2"
-            shift
-            shift
+            shift 2
             ;;
         --pwls-vector)
-			if [ -n "$2" ] && [[ "$2" != -* ]]; then
-				PWLS_VECTOR="$2"
-				shift 2
-			else
-				echo "Error: --pwls-vector option requires an argument." >&2
-				usage error
-				exit 1
-			fi
+            require_value "$1" "${2:-}"
+			PWLS_VECTOR="$2"
+			shift 2
 	    	;;
 		--geometry-info)
-			if [ -n "$2" ] && [[ "$2" != -* ]]; then
-				GEOMETRY_INFO_FILE="$2"
-				shift 2
-			else
-				echo "Error: --geometry-info option requires an argument." >&2
-				usage error
-				exit 1
-			fi
+            require_value "$1" "${2:-}"
+			GEOMETRY_INFO_FILE="$2"
+			shift 2
 	    	;;
         --output-prefix)
+            require_value "$1" "${2:-}"
 	    	OUTPUT_PREFIX="$2"
 	    	shift 2
 	    	;;
 		--output-suffix)
+            require_value "$1" "${2:-}"
 	    	OUTPUT_SUFFIX="$2"
 			shift 2
 	    	;;
-        -u,--keep-input-files)
+        -u|--keep-input-files)
             KEEPINPUTFILES=true
             shift
             ;;
-        -v,--den-output)
+        -v|--den-output)
             TIFFOUTPUT=false
             shift
             ;;
         --volume-sizex)
+            require_value "$1" "${2:-}"
             BOXX="$2"
-            shift
-            shift
+            shift 2
             ;;
         --volume-sizey)
+            require_value "$1" "${2:-}"
             BOXY="$2"
-            shift
-            shift
+            shift 2
             ;;
 		--straight-rotation-axis)
 		    STRAIGHT_ROTATION_AXIS=true
 	    	shift
 	    	;;
-		--h|--help)
+		-h|--h|--help)
 	    	usage help
 	    	exit 0
 	    	;;
@@ -190,7 +194,7 @@ if [ ! -d "$WD" ]; then
     exit 1
 fi
 
-cd $WD
+cd "$WD" || { echo "Error: Failed to change directory to $WD" >&2; exit 1; }
 
 # Check if EXT exists
 if [ ! -f "$EXT" ]; then
@@ -234,7 +238,7 @@ pixel_size_x=${pixel_size_x:-1}
 PIXELSIZE=$(calc "${pixel_size_x}*${BINNING}")
 ADDITIONALOFFSET=$(calc "${COR_ADDITIONALOFFSET_PIX}*${PIXELSIZE}")
 
-EXTBASE=$(basename $EXT)
+EXTBASE=$(basename "$EXT")
 EXTBASE=${EXTBASE%.*}
 
 if [[ "$BACKPROJECT_ONLY" != true ]]; then
@@ -251,16 +255,16 @@ if [[ -n ${OUTPUT_SUFFIX} ]]; then
 	OUT=${OUT}_${OUTPUT_SUFFIX}
 fi
 
-if [ ! -f $EXT ]; then
-	echo "FIle $EXT does not exist!"
+if [ ! -f "$EXT" ]; then
+	echo "File $EXT does not exist!"
 	exit 1
 fi
 
 SLICECOUNT=16
 
-DIMX=$(dentk-info --dim $EXT  | cut -f1)
-DIMY=$(dentk-info --dim $EXT  | cut -f2)
-DIMZ=$(dentk-info --dim $EXT  | cut -f3)
+DIMX=$(dentk-info --dim "$EXT"  | cut -f1)
+DIMY=$(dentk-info --dim "$EXT"  | cut -f2)
+DIMZ=$(dentk-info --dim "$EXT"  | cut -f3)
 FROM=0
 TO=$( calc "${DIMY}-1" )
 #FROM=$suggested_minindex
@@ -374,7 +378,7 @@ run_job() {
     (
         exit_code=0
 
-        reconstructSlice2D ${ARG[@]} \
+        reconstructSlice2D "${ARG[@]}" \
             --start-index "$start_index" \
             --slice-count "$slice_count" \
         || exit_code=$?

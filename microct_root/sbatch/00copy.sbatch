@@ -2,8 +2,8 @@
 #SBATCH --time=0-1:00:00
 #SBATCH --nodes=1
 #SBATCH --requeue
-#SBATCH --output=log/00remove-%N-%j.out
-#SBATCH --error=log/00remove-%N-%j.err
+#SBATCH --output=log/00copy-%N-%j.out
+#SBATCH --error=log/00copy-%N-%j.err
 #SBATCH --partition=allcpu
 
 set -euo pipefail
@@ -28,18 +28,24 @@ usage() {
     local out=1
     if [[ "$mode" == "error" ]]; then
         out=2
-    fi  
+    fi
     cat <<EOF >&${out}
 Usage: ${scriptname} [OPTIONS] <WD> <SOURCE> <TARGET>
 
-Options:
-  -r                          Remove recursively
-  --h, --help                 Show this help message and exit.
+Copy files or directories.
 
-Positional Arguments:
-  WD                          Working directory
-  SOURCE                      Source file or directory to be removed
-  TARGET                      Target file or directory to be removed
+Options:
+  -r                          Copy directories recursively.
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  SOURCE                      Source file, directory, or quoted wildcard pattern.
+  TARGET                      Destination file or directory.
+                              For multiple sources, TARGET must be a directory.
+
+Relative SOURCE and TARGET paths are interpreted from WD.
+Quote wildcard patterns to defer their expansion until after changing to WD.
 EOF
 }
 
@@ -51,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             RECURSIVE=true
             shift
             ;;
-		--h|--help)
+		-h|--h|--help)
 	    	usage help
 	    	exit 0
 	    	;;

@@ -56,7 +56,10 @@ Options:
   -t TAU                      Set PDHG tau value (default: $PDHG_TAU)
   -p PLATFORM_ID              Set OpenCL platform ID (default: auto)
   -g, --gradient FLAG         Set gradient type (default: $DEFAULT_GRADIENT)
-                              Leading '--' is optional.
+                              Use either:
+                                -g gradient-forward-3point
+                                -g --gradient-forward-3point
+                              or supply a supported --gradient-* flag directly.
 			     Available options:
 			     --gradient-forward-2point
 			     --gradient-forward-3point
@@ -66,7 +69,6 @@ Options:
 			     --gradient-forward-7point
 			     --gradient-central-3point
 			     --gradient-central-5point
-                              A gradient flag may also be supplied directly.
   --keep-den                  With TIFF output, also save OUTPUT.den (default: false)
   --force                     Force overwrite of existing output (default: false)
    -h, --h, --help             Show this help message and exit successfully
@@ -307,7 +309,7 @@ if [[ -n "$OUTPUT" ]]; then
             echo "Error: Output path $OUTPUT already exists! Use --force to overwrite." >&2
             exit 1
         fi
-        rm -rf "$OUTPUT"
+        rm -rf -- "$OUTPUT"
     fi
     mkdir -p -- "$OUTPUT"
 fi

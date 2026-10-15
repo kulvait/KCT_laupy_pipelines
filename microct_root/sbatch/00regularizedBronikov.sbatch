@@ -15,12 +15,43 @@ start_time=$(date +%s)
 
 # Function to print usage and exit
 usage() {
-    echo "Usage: $0 <WD> <REGULARIZATION> <EXT> <PAG>" >&2
-    exit 1
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: ${scriptname} <WD> <REGULARIZATION> <EXT> <PAG>
+       ${scriptname} -h|--h|--help
+
+Apply regularized Bronikov processing.
+
+Options:
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  REGULARIZATION              Regularization coefficient passed as --epsilon.
+  EXT                         Input extinction DEN file.
+  PAG                         Output processed DEN file; output is forced.
+
+Relative EXT and PAG paths are interpreted from WD.
+EOF
 }
 
-if [ "$#" -ne 4 ]; then
-    usage
+for arg in "$@"; do
+    case "$arg" in
+        -h|--h|--help)
+            usage help
+            exit 0
+            ;;
+    esac
+done
+
+if [[ $# -ne 4 ]]; then
+    echo "Error: Expected WD, REGULARIZATION, EXT, and PAG." >&2
+    usage error
+    exit 1
 fi
 
 # Assign parameters to variables
@@ -50,14 +81,16 @@ PAGIN=${EXTBASE}_trn.den
 TMP=$(mktemp -d -p . "tmp_PAG_XXXXX")
 PAGIN=${TMP}/tra_minus_one.den
 
-# Check if REGULARIZATION is positive float
-if ! [[ "$REGULARIZATION" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-    echo "Error: REGULARIZATION is not a positive float" >&2
+# Check if REGULARIZATION is a positive float
+if ! [[ "$REGULARIZATION" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]; then
+    echo "Error: REGULARIZATION must be a number" >&2
     exit 1
-	if [ "$REGULARIZATION" -le 0 ]; then
-		echo "Error: REGULARIZATION is not a positive float" >&2
-		exit 1
-	fi
+fi
+
+# Check if REGULARIZATION > 0
+if ! awk -v n="$REGULARIZATION" 'BEGIN { exit !(n > 0) }'; then
+    echo "Error: REGULARIZATION must be positive" >&2
+    exit 1
 fi
 
 echo "START $scriptname $WD $EXT" | tee /dev/stderr

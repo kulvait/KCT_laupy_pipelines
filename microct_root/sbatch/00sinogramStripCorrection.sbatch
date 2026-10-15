@@ -13,8 +13,6 @@ trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 echo "START ${jobname} $*"
 start_time=$(date +%s)
 
-unset LD_PRELOAD
-source initGanrec
 
 # Positional arguments
 WD=""
@@ -38,29 +36,41 @@ usage() {
     local out=1
     if [[ "$mode" == "error" ]]; then
         out=2
-    fi  
+    fi
     cat <<EOF >&${out}
-Usage: ${scriptname} [options] <WD> <EXT> <OUT>
+Usage: ${scriptname} [OPTIONS] <WD> <EXT> <OUT>
 
-Positional arguments:
-  WD                          Working directory
-  EXT                         Input file (extension or name)
-  OUT                         Output file name (extension or name)
+Apply sinogram stripe correction to a DEN file.
 
 Options:
-  --gauss                     Apply Gaussian smoothing before strip correction
-  --snr SNR                    Set the signal-to-noise ratio for strip correction (default: $SNR_VALUE)
-  --la-size LA_SIZE            Set the size of the local average (default: $LA_SIZE)
-  --sm-size SM_SIZE            Set the size of the median filter (default: $SM_SIZE)
-  --stripe-fitting             Enable stripe fitting correction
-  --stripe-fitting-order ORDER Set the order of the polynomial for stripe fitting (default: $STRIPE_FITTING_ORDER)
-  --stripe-fitting-sigma SIGMA Set the sigma for the Gaussian smoothing in stripe fitting (default: $STRIPE_FITTING_SIGMA)
-  --stripe-fitting-chunks CHUNKS Set the number of chunks for processing in stripe fitting (default: $STRIPE_FITTING_CHUNKS)
-  --stripe-fitting-sort        Enable sorting of sinograms by mean intensity before stripe fitting
+  --gauss                         Enable Gaussian smoothing.
+  --snr SNR                       Signal-to-noise ratio (default: 3.0).
+  --la-size SIZE                  Large filter size (default: 51).
+  --sm-size SIZE                  Small filter size (default: 21).
+  --stripe-fitting                Enable stripe-fitting correction.
+  --stripe-fitting-order ORDER    Polynomial order (default: 2).
+  --stripe-fitting-sigma SIGMA    Gaussian sigma for stripe fitting (default: 10).
+  --stripe-fitting-chunks COUNT   Number of processing chunks (default: 1).
+  --stripe-fitting-sort           Enable sorting during stripe fitting.
+  -h, --h, --help                  Show this help message and exit successfully.
+
+Positional arguments:
+  WD                              Existing working directory.
+  EXT                             Input extinction DEN file.
+  OUT                             Output corrected DEN file; existing output is overwritten.
+
+Relative EXT and OUT paths are interpreted from WD.
+Stripe-fitting parameters are passed only when --stripe-fitting is enabled.
 EOF
 }
 
-
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
+}
 
 # Parse options
 while [[ $# -gt 0 ]]; do
@@ -71,23 +81,22 @@ while [[ $# -gt 0 ]]; do
             GAUSS_FLAG="--gauss"
             shift
             ;;
-
         --snr)
+            require_value "$1" "${2:-}"
             SNR_VALUE="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --la-size)
+            require_value "$1" "${2:-}"
             LA_SIZE="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --sm-size)
+            require_value "$1" "${2:-}"
             SM_SIZE="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting)
@@ -96,27 +105,32 @@ while [[ $# -gt 0 ]]; do
             ;;
 
         --stripe-fitting-order)
+            require_value "$1" "${2:-}"
             STRIPE_FITTING_ORDER="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting-sigma)
+            require_value "$1" "${2:-}"
             STRIPE_FITTING_SIGMA="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting-chunks)
+            require_value "$1" "${2:-}"
             STRIPE_FITTING_CHUNKS="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting-sort)
             STRIPE_FITTING_SORT_FLAG="--stripe-fitting-sort"
             shift
             ;;
+
+		-h|--h|--help)
+	    	usage help
+		    exit 0
+		    ;;
 
         -*)
             echo "Unknown option: $1" >&2
@@ -152,6 +166,8 @@ if [[ -z "$WD" || -z "$EXT" || -z "$OUT" ]]; then
     exit 1
 fi
 
+unset LD_PRELOAD
+source initGanrec
 cd $WD || exit 1
 
 if [ ! -f "$EXT" ]; then

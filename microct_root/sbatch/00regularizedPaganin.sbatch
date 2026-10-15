@@ -5,17 +5,53 @@
 #SBATCH --partition=allcpu
 #SBATCH --output=log/00regularizedPaganin-%N-%j.out
 #SBATCH --error=log/00regularizedPaganin-%N-%j.err
-scriptname=$(basename $0)
-# Function to print usage and exit
-#This is basically Paganin with ad-hoc regularization factor
+
+set -euo pipefail
+scriptname="${PIPELINE_SCRIPTNAME:-$(basename "$0")}"
+jobname="${PIPELINE_JOBNAME:-$(basename "$0")}"
+trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
+echo "START ${jobname} $*"
+start_time=$(date +%s)
+
 usage() {
-    echo "Usage: $0 <WD> REGULARIZATION <EXT> <PAG>" >&2
-    exit 1
+    local mode="${1:-help}"
+    local out=1
+    if [[ "$mode" == "error" ]]; then
+        out=2
+    fi
+    cat <<EOF >&${out}
+Usage: ${scriptname} <WD> <REGULARIZATION> <EXT> <PAG>
+       ${scriptname} -h|--h|--help
+
+Apply Paganin processing with an ad-hoc regularization coefficient.
+
+Options:
+  -h, --h, --help              Show this help message and exit successfully.
+
+Positional arguments:
+  WD                          Existing working directory.
+  REGULARIZATION              Regularization coefficient.
+  EXT                         Input extinction DEN file.
+  PAG                         Output processed DEN file.
+
+Relative EXT and PAG paths are interpreted from WD.
+An additional intermediate file, <EXT basename>_nt.den, is written beside EXT.
+EOF
 }
 
-# Check if the number of parameters is 2
-if [ "$#" -ne 4 ]; then
-    usage
+for arg in "$@"; do
+    case "$arg" in
+        -h|--h|--help)
+            usage help
+            exit 0
+            ;;
+    esac
+done
+
+if [[ $# -ne 4 ]]; then
+    echo "Error: Expected WD, REGULARIZATION, EXT, and PAG." >&2
+    usage error
+    exit 1
 fi
 
 # Assign parameters to variables
@@ -43,14 +79,16 @@ EXTBASE=${EXT%.den}
 PAGIN=${EXTBASE}_nt.den
 
 
-# Check if REGULARIZATION is positive float
-if ! [[ "$REGULARIZATION" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-    echo "Error: REGULARIZATION is not a positive float" >&2
+# Check if REGULARIZATION is a positive float
+if ! [[ "$REGULARIZATION" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]; then
+    echo "Error: REGULARIZATION must be a number" >&2
     exit 1
-	if [ "$REGULARIZATION" -le 0 ]; then
-		echo "Error: REGULARIZATION is not a positive float" >&2
-		exit 1
-	fi
+fi
+
+# Check if REGULARIZATION > 0
+if ! awk -v n="$REGULARIZATION" 'BEGIN { exit !(n > 0) }'; then
+    echo "Error: REGULARIZATION must be positive" >&2
+    exit 1
 fi
 
 echo "START $scriptname $WD $EXT" | tee /dev/stderr
@@ -74,7 +112,7 @@ function createPagInput()
 		echo "Created ${TMP}/neg_tra.den"
 	else
 		echo "Error creating ${PAGIN} check directory ${TMP}" | tee /dev/stderr
-		exit - 1
+		exit 1
 	fi
 }
 
