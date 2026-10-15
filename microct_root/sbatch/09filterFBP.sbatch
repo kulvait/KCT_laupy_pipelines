@@ -61,6 +61,10 @@ Positional arguments:
 EOF
 }
 
+calc() {
+    awk "BEGIN { print $* }"
+}
+
 FILTER="--filter-ram-lak"
 WINDOW="--window-ramp"
 KAISER_BETA=9
