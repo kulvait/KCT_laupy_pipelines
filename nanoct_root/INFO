@@ -136,7 +136,7 @@ fbp_reconstruction() {
 
 #Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
 #Closer bronikov regpar to 0 stronger regularization, higher kaiser beta stronger regularization
-cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
+#cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
 #fbp_reconstruction 0.05 5 extb2/ext_ll_ssc.den
 #fbp_reconstruction 0.005 5 extb2/ext_ll_ssc.den
 fbp_reconstruction 0.001 5 extb2/ext_ll_ssc.den #Probably the best
