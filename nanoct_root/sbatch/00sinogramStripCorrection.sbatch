@@ -64,6 +64,13 @@ Stripe-fitting parameters are passed only when --stripe-fitting is enabled.
 EOF
 }
 
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
+}
 
 # Parse options
 while [[ $# -gt 0 ]]; do
@@ -74,23 +81,22 @@ while [[ $# -gt 0 ]]; do
             GAUSS_FLAG="--gauss"
             shift
             ;;
-
         --snr)
+            require_value "$1" "${2:-}"
             SNR_VALUE="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --la-size)
+            require_value "$1" "${2:-}"
             LA_SIZE="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --sm-size)
+            require_value "$1" "${2:-}"
             SM_SIZE="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting)
@@ -99,27 +105,32 @@ while [[ $# -gt 0 ]]; do
             ;;
 
         --stripe-fitting-order)
+            require_value "$1" "${2:-}"
             STRIPE_FITTING_ORDER="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting-sigma)
+            require_value "$1" "${2:-}"
             STRIPE_FITTING_SIGMA="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting-chunks)
+            require_value "$1" "${2:-}"
             STRIPE_FITTING_CHUNKS="$2"
-            shift
-            shift
+            shift 2
             ;;
 
         --stripe-fitting-sort)
             STRIPE_FITTING_SORT_FLAG="--stripe-fitting-sort"
             shift
             ;;
+
+		-h|--h|--help)
+	    	usage help
+		    exit 0
+		    ;;
 
         -*)
             echo "Unknown option: $1" >&2

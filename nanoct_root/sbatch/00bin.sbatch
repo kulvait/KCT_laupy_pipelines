@@ -43,7 +43,7 @@ Options:
   --bin-x FACTOR              Override the X-axis factor (default: --bin value).
   --bin-y FACTOR              Override the Y-axis factor (default: --bin value).
   --average                   Use average instead of median binning.
-  -h, --h, --help              Show this help message and exit successfully.
+  -h,--h,--help              Show this help message and exit successfully.
 
 Positional arguments:
   WD                          Existing working directory.
@@ -69,17 +69,17 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         --bin-x)
-			require_value "$@"
+			require_value "$1" "${2:-}"
 	    	BNX="$2"
             shift 2
             ;;
         --bin-y)
-			require_value "$@"
+			require_value "$1" "${2:-}"
 	    	BNY="$2"
             shift 2
             ;;
         --bin)
-			require_value "$@"
+			require_value "$1" "${2:-}"
             BIN="$2"
             shift 2
             ;;
@@ -87,6 +87,10 @@ while [[ $# -gt 0 ]]; do
 		    AVERAGE=true
 	    	shift
 	    	;;
+		-h|--h|--help)
+	    	usage help
+		    exit 0
+		    ;;
         -*)
             echo "Unknown option: $1" >&2
             usage error

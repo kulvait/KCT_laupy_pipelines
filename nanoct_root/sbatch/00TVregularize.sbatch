@@ -23,7 +23,8 @@ CHUNK_SIZE=20
 PDHG_MU=-0.02
 PDHG_SIGMA=-0.2
 PDHG_TAU=-0.2
-GRADIENT="--gradient-forward-3point"  # Default gradient
+DEFAULT_GRADIENT="--gradient-forward-3point"  # Default gradient
+GRADIENT="$DEFAULT_GRADIENT"
 PLATFORM_ID=""
 KEEP_DEN=false
 DEN_OUTPUT=false
@@ -54,7 +55,8 @@ Options:
   -s SIGMA                    Set PDHG sigma value (default: $PDHG_SIGMA)
   -t TAU                      Set PDHG tau value (default: $PDHG_TAU)
   -p PLATFORM_ID              Set OpenCL platform ID (default: auto)
-  -g GRADIENT                 Set gradient type (default: $GRADIENT)
+  -g, --gradient FLAG         Set gradient type (default: $DEFAULT_GRADIENT)
+                              Leading '--' is optional.
 			     Available options:
 			     --gradient-forward-2point
 			     --gradient-forward-3point
@@ -64,10 +66,19 @@ Options:
 			     --gradient-forward-7point
 			     --gradient-central-3point
 			     --gradient-central-5point
+                              A gradient flag may also be supplied directly.
   --keep-den                  With TIFF output, also save OUTPUT.den (default: false)
   --force                     Force overwrite of existing output (default: false)
    -h, --h, --help             Show this help message and exit successfully
 EOF
+}
+
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
 }
 
 # Parse options
@@ -75,38 +86,46 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         -i)
+			require_value "$1" "${2:-}"
             MAX_ITERATIONS_PDHG="$2"
-            shift
-            shift
+            shift 2
             ;;
         -c|--chunk-size)
+			require_value "$1" "${2:-}"
             CHUNK_SIZE="$2"
-            shift
-            shift
+            shift 2
             ;;
         -m)
+			require_value "$1" "${2:-}"
             PDHG_MU="$2"
-            shift
-            shift
+            shift 2
             ;;
         -s)
+			require_value "$1" "${2:-}"
             PDHG_SIGMA="$2"
-            shift
-            shift
+            shift 2
             ;;
         -t)
+			require_value "$1" "${2:-}"
             PDHG_TAU="$2"
-            shift
-            shift
+            shift 2
             ;;
         -p)
+			require_value "$1" "${2:-}"
             PLATFORM_ID="$2"
-            shift
-            shift
+            shift 2
             ;;
-        -g)
+        -g|--gradient)
+            if [[ $# -lt 2 || -z "${2:-}" ]]; then
+                echo "Error: $1 requires a gradient type." >&2
+                usage error
+                exit 1
+            fi
             GRADIENT="$2"
-            shift
+            shift 2
+            ;;
+        --gradient-forward-*|--gradient-central-*)
+            GRADIENT="$1"
             shift
             ;;
 		--keep-den)
@@ -117,7 +136,7 @@ while [[ $# -gt 0 ]]; do
 			FORCE=true
 			shift
 			;;
-		--h|--help)
+		-h|--h|--help)
 	    	usage help
 	    	exit 0
 	    	;;
@@ -153,7 +172,9 @@ fi
 # Assign parameters to variables
 PATH=$PATH:$PWD/bin
 
-# Check if the specified gradient is valid
+# Accept either gradient-forward-2point or --gradient-forward-2point.
+GRADIENT="--${GRADIENT#--}"
+
 VALID_GRADIENTS=(
     "--gradient-forward-2point"
     "--gradient-forward-3point"
@@ -165,13 +186,20 @@ VALID_GRADIENTS=(
     "--gradient-central-5point"
 )
 
-if [[ ! " ${VALID_GRADIENTS[@]} " =~ " ${GRADIENT} " ]]; then
-    echo "Invalid gradient type: $GRADIENT. Choose from the following:"
-    for grad in "${VALID_GRADIENTS[@]}"; do
-        echo "  $grad"
-    done
+gradient_valid=false
+for candidate in "${VALID_GRADIENTS[@]}"; do
+    if [[ "$GRADIENT" == "$candidate" ]]; then
+        gradient_valid=true
+        break
+    fi
+done
+
+if [[ "$gradient_valid" != true ]]; then
+    echo "Error: Unsupported gradient type: $GRADIENT" >&2
+    usage error
     exit 1
 fi
+
 # Run kct-rof with the given parameters
 echo "WD=$WD"
 echo "INPUT=$INPUT"
@@ -283,8 +311,28 @@ if [[ -n "$OUTPUT" ]]; then
 	fi
 fi
 
+CMD=(
+    kct-rof
+    --relaxed
+    --force
+    --max-iterations-pdhg "$MAX_ITERATIONS_PDHG"
+    --chunk-size "$CHUNK_SIZE"
+    --pdhg-mu "$PDHG_MU"
+    -p "$PLATFORM_ID"
+    "$GRADIENT"
+    --pdhg-sigma "$PDHG_SIGMA"
+    --pdhg-tau "$PDHG_TAU"
+    "$INPUT_FILE"
+    "$OUTPUT_FILE"
+)
 
-kct-rof --relaxed --force --max-iterations-pdhg $MAX_ITERATIONS_PDHG --chunk-size $CHUNK_SIZE --pdhg-mu $PDHG_MU -p $PLATFORM_ID --gradient-forward-3point --pdhg-sigma $PDHG_SIGMA --pdhg-tau $PDHG_TAU $INPUT_FILE $OUTPUT_FILE
+# Print a shell-escaped representation for reproducible logging.
+printf 'Executing:'
+printf ' %q' "${CMD[@]}"
+printf '\n'
+
+# Execute directly; no eval or string splitting.
+"${CMD[@]}"
 
 #If output dir is specified, convert the output DEN file to TIFF stack
 if [[ -n "$OUTPUT" ]]; then

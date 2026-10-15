@@ -46,15 +46,15 @@ EOF
 while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
+        -h|--h|--help)
+            usage help
+            exit 0
+            ;;
         -*)
             echo "Unknown option $1" >&2
             usage error
 			exit 1
             ;;
-		-h|--h|--help)
-	    	usage help
-	    	exit 0
-	    	;;
         *)
             if [ -z "$WD" ]; then
                 WD="$1"

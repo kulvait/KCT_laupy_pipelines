@@ -32,7 +32,7 @@ Usage: ${scriptname} [OPTIONS] <WD> <SOURCE> <TARGET>
 
 Options:
   --force                     Overwrite existing target if it exists.
-  --h, --help                 Show this help message and exit.
+  -h, --h, --help                 Show this help message and exit.
 
 Positional Arguments:
   WD                          Working directory.
@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
-        --h|--help)
+        -h|--h|--help)
             usage help
             exit 0
             ;;

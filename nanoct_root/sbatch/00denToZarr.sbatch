@@ -33,7 +33,7 @@ Convert a DEN file to ZIP-backed Zarr v3 output.
 Options:
   --force                     Overwrite existing output.
   --delete-input-den          Delete INPUT_FILE only after successful conversion.
-  -h, --h, --help              Show this help message and exit successfully.
+  -h,--h,--help              Show this help message and exit successfully.
 
 Positional arguments:
   WD                          Existing working directory.
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
-		--h|--help)
+		-h|--h|--help)
 	    	usage help
 	    	exit 0
 	    	;;

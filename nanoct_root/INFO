@@ -21,8 +21,11 @@ Pipeline for reconstruction in nanotomography
 #Run diagnostics of the individual scans to see intensity profile or current correction shift
 submitslurm --pipeline-step 0 01scanTimingDiagnostics.sbatch
 
+#You might want symlink darkfield measurement to each folder e.g. when dark sample is wd_dar/nano17222_pco_darks_0p1 then you run
+#submitslurm --pipeline-step 0 -a " ../../wd_dar/nano17222_pco_darks_0p1 dar" 00symlink.sbatch
+
 #Tiff to den format conversion
-submitslurm -a " LogScan.log raw  --foreign-log-file dar/LogScan.log  --foreign-raw-dir dar/raw --compression htj2k --zip --clevel 0 --output-prefix h2k_ll" --pipeline-step 1 01createZarrStructure.sbatch
+submitslurm --pipeline-step 1 -a " LogScan.log raw  --foreign-log-file dar/LogScan.log  --foreign-raw-dir dar/raw --compression htj2k --zip --clevel 0 --output-prefix h2k_ll" 01createZarrStructure.sbatch
 
 #Destar of dark fields and zinger removal for flat fields and img produces img/dar/ref_clean.den
 submitslurm --pipeline-step 2 -a " --zar-input-file h2k_ll.zar --suffix _ll_clean" 02destar.sbatch
