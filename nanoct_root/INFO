@@ -87,9 +87,9 @@ cgls_reconstruction() {
 
     echo "Starting reconstruction of $EXTB2 with bronikov regpar $REGPAR to produce ${BROB2} and ${RECDIR}"
 
-    submitslurm --pipeline-step 10 -a " -r -f $RECDIR" 00remove.sbatch
-    submitslurm --pipeline-step 10 -a " -f $BROB2" 00remove.sbatch
-    submitslurm --pipeline-step 11 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
+    submitslurm --pipeline-step 11 -a " -r -f $RECDIR" 00remove.sbatch
+    submitslurm --pipeline-step 11 -a " -f $BROB2" 00remove.sbatch
+    submitslurm --pipeline-step 12 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
 
 
     local REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck"
@@ -97,7 +97,7 @@ cgls_reconstruction() {
         REC_ARG+=" --output-suffix $SUFFIX"
     fi
     REC_ARG+=" $BROB2"
-    submitslurm --pipeline-step 12 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
+    submitslurm --pipeline-step 15 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
 }
 
 #FBP with Bronikov
@@ -120,22 +120,23 @@ fbp_reconstruction() {
     local RECDIR="recb2_cgls_${STEM}"
 
     echo "Starting reconstruction of $EXTB2 with bronikov regpar $REGPAR and kaiser beta ${KAISERPAR} to produce ${BROB2} and ${KAIB2} and ${RECDIR}"
-    submitslurm --pipeline-step 10 -a " -r -f $RECDIR" 00remove.sbatch
-    submitslurm --pipeline-step 10 -a " -f $BROB2" 00remove.sbatch
-    submitslurm --pipeline-step 10 -a " -f $KAIB2" 00remove.sbatch
+    submitslurm --pipeline-step 11 -a " -r -f $RECDIR" 00remove.sbatch
+    submitslurm --pipeline-step 11 -a " -f $BROB2" 00remove.sbatch
+    submitslurm --pipeline-step 11 -a " -f $KAIB2" 00remove.sbatch
 
-    submitslurm --pipeline-step 11 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
-    submitslurm --pipeline-step 12 -f allgpu -a " --pad-symm --window-kaiser --window-kaiser-beta ${KAISERPAR} ${BROB2} ${KAIB2}" 09filterFBP.sbatch
+    submitslurm --pipeline-step 12 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
+    submitslurm --pipeline-step 13 -f allgpu -a " --pad-symm --window-kaiser --window-kaiser-beta ${KAISERPAR} ${BROB2} ${KAIB2}" 09filterFBP.sbatch
     local REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck --backproject"
     if [[ -n "$SUFFIX" ]]; then
         REC_ARG+=" --output-suffix $SUFFIX"
     fi
     REC_ARG+=" $KAIB2"
-    submitslurm --pipeline-step 15 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
+    submitslurm --pipeline-step 14 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
 }
 
 #Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
 #Closer bronikov regpar to 0 stronger regularization, higher kaiser beta stronger regularization
+cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
 #fbp_reconstruction 0.05 5 extb2/ext_ll_ssc.den
 #fbp_reconstruction 0.005 5 extb2/ext_ll_ssc.den
 fbp_reconstruction 0.001 5 extb2/ext_ll_ssc.den #Probably the best
