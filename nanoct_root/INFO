@@ -69,7 +69,7 @@ submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/e
 #CGLS reconstruction
 #submitslurm  --pipeline-step 10 -s -g -a " --rotation-axis-file ext_ll_rotationcenter180.log extb2/ext_ll_ssc.den --geometry-info LogScan.tck" 00reconstructCGLS.sbatch
 
-#CGLS with Bronikov
+#Simple reconstruction function for CGLS with Bronikov regularization
 cgls_reconstruction() {
     local REGPAR="$1"
     local EXTB2="$2"
@@ -99,6 +99,7 @@ cgls_reconstruction() {
     REC_ARG+=" $BROB2"
     submitslurm --pipeline-step 15 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
 }
+#cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
 
 #FBP with Bronikov
 fbp_reconstruction() {
@@ -133,14 +134,172 @@ fbp_reconstruction() {
     REC_ARG+=" $KAIB2"
     submitslurm --pipeline-step 14 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
 }
-
-#Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
-#Closer bronikov regpar to 0 stronger regularization, higher kaiser beta stronger regularization
-#cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
 #fbp_reconstruction 0.05 5 extb2/ext_ll_ssc.den
 #fbp_reconstruction 0.005 5 extb2/ext_ll_ssc.den
 fbp_reconstruction 0.001 5 extb2/ext_ll_ssc.den #Probably the best
 #fbp_reconstruction 0.0005 5 extb2/ext_ll_ssc.den
+
+#FBP with Bronikov
+require_value() {
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "Error: $1 requires a value." >&2
+        usage error
+        exit 1
+    fi
+}
+
+fbp_reconstruction() {
+    local BRONIKOVPAR=0
+    local KAISERPAR=5
+    local STRIPSMPAR=0
+    local STRIPLAPAR=0
+    local SUFFIX=""
+    #random id to avoid name clashes in case of multiple runs
+    local RANDOMID=$(LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 5)
+
+    local EXTB2=""
+    local BASENAME STEM EXT
+    local IN OUT OUTSTR RECDIR
+    local LASTDEP="10"
+    local REC_ARG
+
+    local -a OUTFILES=()
+
+    # Parse options
+    while (($#)); do
+        case "$1" in
+            --bronikov)
+                require_value "$1" "${2:-}"
+                BRONIKOVPAR="$2"
+                shift 2
+                ;;
+            --kaiser)
+                require_value "$1" "${2:-}"
+                KAISERPAR="$2"
+                shift 2
+                ;;
+            --strip)
+                [[ $# -ge 3 ]] || {
+                    echo "Error: --strip requires two values" >&2
+                    return 2
+                }
+                STRIPSMPAR="$2"
+                STRIPLAPAR="$3"
+                shift 3
+                ;;
+            --suffix)
+                require_value "$1" "${2:-}"
+                SUFFIX="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                if (($#)); then
+                    EXTB2="$1"
+                    shift
+                fi
+                break
+                ;;
+            -*)
+                echo "Error: unknown option '$1'" >&2
+                return 2
+                ;;
+            *)
+                EXTB2="$1"
+                shift
+                break
+                ;;
+        esac
+    done
+
+    if [[ -z "$EXTB2" ]]; then
+        echo "Usage: fbp_reconstruction [--bronikov N] [--kaiser N] [--strip PAR1 PAR2] [--suffix SUFFIX] FILE" >&2
+        return 2
+    fi
+
+    BASENAME="$(basename "$EXTB2")"
+    STEM="${BASENAME%.*}"
+    EXT="${BASENAME##*.}"
+
+    IN="$EXTB2"
+    OUTSTR="$STEM"
+
+    echo "Starting FBP reconstruction of $EXTB2"
+    echo "Bronikov parameter: $BRONIKOVPAR"
+    echo "Kaiser beta: $KAISERPAR"
+    echo "Sinogram strip: $STRIPSMPAR"
+    echo "Lamination strip: $STRIPLAPAR"
+    echo "Random ID: $RANDOMID"
+
+    # Optional Bronikov regularization
+    if [[ "$BRONIKOVPAR" != "0" ]]; then
+        OUTSTR+="_bro${BRONIKOVPAR}"
+        OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
+
+        submitslurm --pipeline-step "${RANDOMID}_1" \
+            --dependencies "$LASTDEP" -g \
+            -a "$BRONIKOVPAR $IN $OUT" \
+            00regularizedBronikov.sbatch || return $?
+
+        LASTDEP="${RANDOMID}_1"
+        OUTFILES+=("$OUT")
+        IN="$OUT"
+    fi
+
+    # Optional sinogram strip correction
+    if [[ "$STRIPSMPAR" != "0" ]]; then
+        OUTSTR+="_ssc_sm${STRIPSMPAR}_LA${STRIPLAPAR}"
+        OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
+
+        submitslurm --pipeline-step "${RANDOMID}_2" \
+            --dependencies "$LASTDEP" -f allgpu \
+            -a "--sm-size ${STRIPSMPAR} --la-size ${STRIPLAPAR} $IN $OUT" \
+            00sinogramStripCorrection.sbatch || return $?
+
+        LASTDEP="${RANDOMID}_2"
+        OUTFILES+=("$OUT")
+        IN="$OUT"
+    fi
+
+    # Kaiser filtering always runs
+    OUTSTR+="_kai${KAISERPAR}"
+    OUT="extb2/${OUTSTR}${SUFFIX}.${EXT}"
+
+    submitslurm --pipeline-step "${RANDOMID}_3" \
+        --dependencies "$LASTDEP" -f allgpu \
+        -a "--pad-symm --window-kaiser --window-kaiser-beta ${KAISERPAR} $IN $OUT" \
+        09filterFBP.sbatch || return $?
+
+    LASTDEP="${RANDOMID}_3"
+
+    BASENAME="$(basename "$OUT")"
+    STEM="${BASENAME%.*}"
+    RECDIR="recb2_backproject_${STEM}"
+
+    # Reconstruction
+    REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck --backproject"
+
+    if [[ -n "$SUFFIX" ]]; then
+        REC_ARG+=" --output-suffix $SUFFIX"
+    fi
+
+    REC_ARG+=" $OUT"
+
+    submitslurm --pipeline-step "${RANDOMID}_REC" \
+        --dependencies "$LASTDEP" -s -g \
+        -a "$REC_ARG" \
+        00reconstructCGLS.sbatch || return $?
+
+    # Remove intermediate files after reconstruction completes
+    if ((${#OUTFILES[@]})); then
+        echo ${OUTFILES[*]}
+        #submitslurm --pipeline-step "${RANDOMID}_REMOVE" --dependencies "${RANDOMID}_REC" -a "-r -f ${OUTFILES[*]}" 00remove.sbatch || return $?
+    fi
+}
+
+#Closer bronikov regpar to 0 stronger regularization, higher kaiser beta stronger regularization
+#Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
+fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den
 
 #Cleanup
 submitslurm --pipeline-step 19 -a " -f -r extb2 " 00remove.sbatch
