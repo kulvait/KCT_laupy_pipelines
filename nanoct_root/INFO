@@ -52,7 +52,7 @@ submitslurm --pipeline-step 8 -a " --regions-json ref_ll_clean_darksub_curcor.js
 submitslurm --pipeline-step 9 -a " ext_ll.den extb2/ext_ll.den" 00bin.sbatch
 
 #SSC filter
-submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
+#submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
 #--sm-size 201 --la-size 301 --snr 2 ... large ring artefacts
 #--sm-size 151 --la-size 251 --snr 2 or --sm-size 101 --la-size 201 for medium size rings
 
@@ -69,39 +69,7 @@ submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/e
 #CGLS reconstruction
 #submitslurm  --pipeline-step 10 -s -g -a " --rotation-axis-file ext_ll_rotationcenter180.log extb2/ext_ll_ssc.den --geometry-info LogScan.tck" 00reconstructCGLS.sbatch
 
-#Simple reconstruction function for CGLS with Bronikov regularization
-cgls_reconstruction() {
-    local REGPAR="$1"
-    local EXTB2="$2"
-    local SUFFIX="${3:-}"
 
-    local BASENAME
-    BASENAME="$(basename "$EXTB2")"
-
-    local STEM="${BASENAME%.*}"
-    local EXT="${BASENAME##*.}"
-
-    local BROB2="extb2/bro${REGPAR}_${STEM}${SUFFIX}.${EXT}"
-    local RECDIR="recb2_cgls_${STEM}"
-    RECDIR="recb2_cgls_bro${REGPAR}_${STEM}${SUFFIX}"
-
-    echo "Starting reconstruction of $EXTB2 with bronikov regpar $REGPAR to produce ${BROB2} and ${RECDIR}"
-
-    submitslurm --pipeline-step 11 -a " -r -f $RECDIR" 00remove.sbatch
-    submitslurm --pipeline-step 11 -a " -f $BROB2" 00remove.sbatch
-    submitslurm --pipeline-step 12 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
-
-
-    local REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck"
-    if [[ -n "$SUFFIX" ]]; then
-        REC_ARG+=" --output-suffix $SUFFIX"
-    fi
-    REC_ARG+=" $BROB2"
-    submitslurm --pipeline-step 15 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
-}
-#cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
-
-#FBP with Bronikov
 # Validate one or more values:
 # require_value OPTION VALUE [VALUE ...]
 require_value() {
@@ -119,6 +87,129 @@ require_value() {
             return 2
         fi
     done
+}
+
+#FBP with Bronikov
+cgls_reconstruction() {
+    local BRONIKOVPAR=0 STRIPSMPAR=0 STRIPLAPAR=0 SUFFIX=""
+    local EXTB2="" BASENAME STEM EXT IN OUT OUTSTR RANDOMID REC_ARG RECDIR NODE_NAME
+    local LASTDEP=10 FILE REMOVE_INDEX=0
+    local -a OUTFILES=()
+    local USAGE="Usage: cgls_reconstruction [--bronikov N] [--strip SM LA] [--suffix SUFFIX] FILE"
+
+    while (($#)); do
+        case "$1" in
+            --bronikov) require_value "$1" "${2:-}" || return $?; BRONIKOVPAR="$2"; shift 2 ;;
+            --strip)    require_value "$1" "${2:-}" "${3:-}" || return $?; STRIPSMPAR="$2"; STRIPLAPAR="$3"; shift 3 ;;
+            --suffix)   require_value "$1" "${2:-}" || return $?; SUFFIX="$2"; shift 2 ;;
+            -h|--help)  echo "$USAGE"; return 0 ;;
+            --)         shift; break ;;
+            -*)         echo "Error: unknown option '$1'." >&2; return 2 ;;
+            *)          break ;;
+        esac
+    done
+
+    if (($# != 1)) || [[ -z "${1:-}" ]]; then
+        echo "$USAGE" >&2
+        return 2
+    fi
+    EXTB2="$1"
+
+    # Validate before submitting any jobs.
+    local NUMBER='^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$'
+    if [[ ! "$BRONIKOVPAR" =~ $NUMBER ]]; then
+        echo "Error: --bronikov requires a nonnegative number." >&2
+        return 2
+    fi
+    if [[ ! "$STRIPSMPAR" =~ ^[0-9]+$ || ! "$STRIPLAPAR" =~ ^[0-9]+$ ]]; then
+        echo "Error: --strip requires two nonnegative integers." >&2
+        return 2
+    fi
+
+    # -a is a serialized argument string: keep paths/suffixes shell-safe.
+    if [[ ! "$EXTB2" =~ ^[a-zA-Z0-9_./+-]+$ || ! "$SUFFIX" =~ ^[a-zA-Z0-9_.-]*$ ]]; then
+        echo "Error: FILE or SUFFIX contains unsupported whitespace or shell characters." >&2
+        return 2
+    fi
+
+    BASENAME="${EXTB2##*/}"
+    if [[ "$BASENAME" != *.* || "$BASENAME" == .* || "$BASENAME" == *. ]]; then
+        echo "Error: FILE must have a nonempty stem and extension." >&2
+        return 2
+    fi
+    STEM="${BASENAME%.*}"
+    EXT="${BASENAME##*.}"
+
+    # Bounded read: no SIGPIPE-producing tr | head pipeline.
+    RANDOMID=$(od -An -N8 -tx1 /dev/urandom) || return $?
+    RANDOMID="${RANDOMID//[[:space:]]/}"
+
+    IN="$EXTB2"
+    OUTSTR="$STEM"
+
+    echo "Starting CGLS reconstruction: $EXTB2, RANDOMID: $RANDOMID, SUFFIX: $SUFFIX"
+    echo "Bronikov: $BRONIKOVPAR; strip SM/LA: $STRIPSMPAR/$STRIPLAPAR"
+
+    # Optional Bronikov regularization.
+    if [[ ! "$BRONIKOVPAR" =~ ^0+([.]0+)?([eE][+-]?[0-9]+)?$ ]]; then
+        NODE_NAME="1_BRO_${RANDOMID}"
+        OUTSTR+="_bro${BRONIKOVPAR}"
+        OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
+
+        submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -g -a "$BRONIKOVPAR $IN $OUT" 00regularizedBronikov.sbatch || return $?
+
+        LASTDEP="$NODE_NAME"
+        OUTFILES+=("$OUT")
+        IN="$OUT"
+    fi
+
+    # Optional sinogram strip correction.
+    if [[ ! "$STRIPSMPAR" =~ ^0+$ ]]; then
+        NODE_NAME="2_SSC_${RANDOMID}"
+        OUTSTR+="_ssc_sm${STRIPSMPAR}_LA${STRIPLAPAR}"
+        OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
+
+        submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -f allgpu -a "--sm-size $STRIPSMPAR --la-size $STRIPLAPAR $IN $OUT" 00sinogramStripCorrection.sbatch || return $?
+
+        LASTDEP="$NODE_NAME"
+        OUTFILES+=("$OUT")
+        IN="$OUT"
+    fi
+
+    # Reconstruct the latest branch output, or the original input if
+    # neither preprocessing stage was requested. No FBP filter.
+    BASENAME="${IN##*/}"
+    STEM="${BASENAME%.*}"
+    RECDIR="recb2_cgls_${STEM}"
+
+    REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck"
+    if [[ -n "$SUFFIX" ]]; then
+        REC_ARG+=" --output-suffix $SUFFIX"
+        RECDIR+="_${SUFFIX}"
+    fi
+    REC_ARG+=" $IN"
+
+    echo "Scheduling CGLS reconstruction into $RECDIR"
+    NODE_NAME="5_REC_${RANDOMID}"
+    submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -s -g -a "$REC_ARG" 00reconstructCGLS.sbatch || return $?
+
+    LASTDEP="$NODE_NAME"
+    CLEANUPDEPS+=("$NODE_NAME")
+
+    # One removal call per generated intermediate.
+    NODE_NAME="6_REMOVE_${RANDOMID}"
+    for FILE in "${OUTFILES[@]}"; do
+        REMOVE_INDEX=$((REMOVE_INDEX + 1))
+        echo "Scheduling cleanup of intermediate file: $FILE (index $REMOVE_INDEX)"
+        submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -a "-f $FILE" 00remove.sbatch || return $?
+    done
+
+    # Also wait for branch-local removals before final directory cleanup.
+    if ((${#OUTFILES[@]})); then
+        CLEANUPDEPS+=("$NODE_NAME")
+    fi
+
+    return 0
 }
 
 fbp_reconstruction() {
@@ -205,7 +296,7 @@ fbp_reconstruction() {
     # Always filter. Keep this output; only temporary stages enter OUTFILES.
     NODE_NAME="3_KAI_${RANDOMID}"
     OUTSTR+="_kai${KAISERPAR}"
-    OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
+    OUT="extb2/${OUTSTR}.${EXT}"
     submitslurm --pipeline-step "${NODE_NAME}" --dependencies "$LASTDEP" -f allgpu -a "--pad-symm --window-kaiser --window-kaiser-beta $KAISERPAR $IN $OUT" 09filterFBP.sbatch || return $?
     LASTDEP="${NODE_NAME}"
     OUTFILES+=("$OUT")
