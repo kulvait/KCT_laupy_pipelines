@@ -102,207 +102,145 @@ cgls_reconstruction() {
 #cgls_reconstruction 0.001 extb2/ext_ll_ssc.den #Probably the best
 
 #FBP with Bronikov
-fbp_reconstruction() {
-    local REGPAR="$1"
-    local KAISERPAR="$2"
-    local EXTB2="$3"
-    local SUFFIX="${4:-}"
-
-    local BASENAME
-    BASENAME="$(basename "$EXTB2")"
-    local STEM="${BASENAME%.*}"
-    local EXT="${BASENAME##*.}"
-
-    local BROB2="extb2/bro${REGPAR}_${STEM}${SUFFIX}.${EXT}"
-    local KAIB2="extb2/bro${REGPAR}_kai${KAISERPAR}_${STEM}${SUFFIX}.${EXT}"
-    BASENAME="$(basename "$KAIB2")"
-    STEM="${BASENAME%.*}"
-    EXT="${BASENAME##*.}"
-    local RECDIR="recb2_cgls_${STEM}"
-
-    echo "Starting reconstruction of $EXTB2 with bronikov regpar $REGPAR and kaiser beta ${KAISERPAR} to produce ${BROB2} and ${KAIB2} and ${RECDIR}"
-    submitslurm --pipeline-step 11 -a " -r -f $RECDIR" 00remove.sbatch
-    submitslurm --pipeline-step 11 -a " -f $BROB2" 00remove.sbatch
-    submitslurm --pipeline-step 11 -a " -f $KAIB2" 00remove.sbatch
-
-    submitslurm --pipeline-step 12 -g -a "$REGPAR $EXTB2 $BROB2" 00regularizedBronikov.sbatch
-    submitslurm --pipeline-step 13 -f allgpu -a " --pad-symm --window-kaiser --window-kaiser-beta ${KAISERPAR} ${BROB2} ${KAIB2}" 09filterFBP.sbatch
-    local REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck --backproject"
-    if [[ -n "$SUFFIX" ]]; then
-        REC_ARG+=" --output-suffix $SUFFIX"
-    fi
-    REC_ARG+=" $KAIB2"
-    submitslurm --pipeline-step 14 -s -g -a "${REC_ARG}" 00reconstructCGLS.sbatch
-}
-#fbp_reconstruction 0.05 5 extb2/ext_ll_ssc.den
-#fbp_reconstruction 0.005 5 extb2/ext_ll_ssc.den
-fbp_reconstruction 0.001 5 extb2/ext_ll_ssc.den #Probably the best
-#fbp_reconstruction 0.0005 5 extb2/ext_ll_ssc.den
-
-#FBP with Bronikov
+# Validate one or more values:
+# require_value OPTION VALUE [VALUE ...]
 require_value() {
-    if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        echo "Error: $1 requires a value." >&2
-        usage error
-        exit 1
-    fi
-}
+    local option="${1:-option}" value
+    shift || return 2
 
-fbp_reconstruction() {
-    local BRONIKOVPAR=0
-    local KAISERPAR=5
-    local STRIPSMPAR=0
-    local STRIPLAPAR=0
-    local SUFFIX=""
-    #random id to avoid name clashes in case of multiple runs
-    local RANDOMID=$(LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 5)
-
-    local EXTB2=""
-    local BASENAME STEM EXT
-    local IN OUT OUTSTR RECDIR
-    local LASTDEP="10"
-    local REC_ARG
-
-    local -a OUTFILES=()
-
-    # Parse options
-    while (($#)); do
-        case "$1" in
-            --bronikov)
-                require_value "$1" "${2:-}"
-                BRONIKOVPAR="$2"
-                shift 2
-                ;;
-            --kaiser)
-                require_value "$1" "${2:-}"
-                KAISERPAR="$2"
-                shift 2
-                ;;
-            --strip)
-                [[ $# -ge 3 ]] || {
-                    echo "Error: --strip requires two values" >&2
-                    return 2
-                }
-                STRIPSMPAR="$2"
-                STRIPLAPAR="$3"
-                shift 3
-                ;;
-            --suffix)
-                require_value "$1" "${2:-}"
-                SUFFIX="$2"
-                shift 2
-                ;;
-            --)
-                shift
-                if (($#)); then
-                    EXTB2="$1"
-                    shift
-                fi
-                break
-                ;;
-            -*)
-                echo "Error: unknown option '$1'" >&2
-                return 2
-                ;;
-            *)
-                EXTB2="$1"
-                shift
-                break
-                ;;
-        esac
-    done
-
-    if [[ -z "$EXTB2" ]]; then
-        echo "Usage: fbp_reconstruction [--bronikov N] [--kaiser N] [--strip PAR1 PAR2] [--suffix SUFFIX] FILE" >&2
+    if (($# == 0)); then
+        echo "Error: $option requires a value." >&2
         return 2
     fi
 
-    BASENAME="$(basename "$EXTB2")"
+    for value in "$@"; do
+        if [[ -z "$value" || "$value" == --* ]]; then
+            echo "Error: missing value for $option." >&2
+            return 2
+        fi
+    done
+}
+
+fbp_reconstruction() {
+    local BRONIKOVPAR=0 KAISERPAR=5 STRIPSMPAR=0 STRIPLAPAR=0 SUFFIX=""
+    local EXTB2="" BASENAME STEM EXT IN OUT OUTSTR RANDOMID REC_ARG NODE_NAME
+    local LASTDEP=10 FILE REMOVE_INDEX=0
+    local -a OUTFILES=()
+    local USAGE="Usage: fbp_reconstruction [--bronikov N] [--kaiser N] [--strip SM LA] [--suffix SUFFIX] FILE"
+
+    while (($#)); do
+        case "$1" in
+            --bronikov) require_value "$1" "${2:-}" || return $?; BRONIKOVPAR="$2"; shift 2 ;;
+            --kaiser)   require_value "$1" "${2:-}" || return $?; KAISERPAR="$2"; shift 2 ;;
+            --strip)    require_value "$1" "${2:-}" "${3:-}" || return $?; STRIPSMPAR="$2"; STRIPLAPAR="$3"; shift 3 ;;
+            --suffix)   require_value "$1" "${2:-}" || return $?; SUFFIX="$2"; shift 2 ;;
+            -h|--help)  echo "$USAGE"; return 0 ;;
+            --)         shift; break ;;
+            -*)         echo "Error: unknown option '$1'." >&2; return 2 ;;
+            *)          break ;;
+        esac
+    done
+
+    if (($# != 1)) || [[ -z "${1:-}" ]]; then
+        echo "$USAGE" >&2
+        return 2
+    fi
+    EXTB2="$1"
+
+    # Validate before submitting any jobs.
+    local NUMBER='^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$'
+    if [[ ! "$BRONIKOVPAR" =~ $NUMBER || ! "$KAISERPAR" =~ $NUMBER ]]; then
+        echo "Error: --bronikov and --kaiser require nonnegative numbers." >&2
+        return 2
+    fi
+    if [[ ! "$STRIPSMPAR" =~ ^[0-9]+$ || ! "$STRIPLAPAR" =~ ^[0-9]+$ ]]; then
+        echo "Error: --strip requires two nonnegative integers." >&2
+        return 2
+    fi
+
+    # -a is a serialized argument string: keep paths/suffixes shell-safe.
+    if [[ ! "$EXTB2" =~ ^[a-zA-Z0-9_./+-]+$ || ! "$SUFFIX" =~ ^[a-zA-Z0-9_.-]*$ ]]; then
+        echo "Error: FILE or SUFFIX contains unsupported whitespace or shell characters." >&2
+        return 2
+    fi
+
+    BASENAME="${EXTB2##*/}"
+    if [[ "$BASENAME" != *.* || "$BASENAME" == .* || "$BASENAME" == *. ]]; then
+        echo "Error: FILE must have a nonempty stem and extension." >&2
+        return 2
+    fi
     STEM="${BASENAME%.*}"
     EXT="${BASENAME##*.}"
 
+    # No tr | head pipeline: safe with pipefail and no SIGPIPE issue.
+    RANDOMID=$(tr -dc 'A-Z0-9' < /dev/urandom | head -c 5) || return $?
+
     IN="$EXTB2"
     OUTSTR="$STEM"
+    LASTDEP="10"  # The last step before reconstruction is the SSC filter, which is step 10.
 
-    echo "Starting FBP reconstruction of $EXTB2"
-    echo "Bronikov parameter: $BRONIKOVPAR"
-    echo "Kaiser beta: $KAISERPAR"
-    echo "Sinogram strip: $STRIPSMPAR"
-    echo "Lamination strip: $STRIPLAPAR"
-    echo "Random ID: $RANDOMID"
-
-    # Optional Bronikov regularization
-    if [[ "$BRONIKOVPAR" != "0" ]]; then
+    echo "Starting FBP reconstruction: $EXTB2, RANDOMID: $RANDOMID, SUFFIX: $SUFFIX"
+    echo "Bronikov: $BRONIKOVPAR; Kaiser: $KAISERPAR; strip SM/LA: $STRIPSMPAR/$STRIPLAPAR"
+    # Treat all numeric representations of zero as disabled.
+    if [[ ! "$BRONIKOVPAR" =~ ^0+([.]0+)?([eE][+-]?[0-9]+)?$ ]]; then
+        NODE_NAME="1_BRO_${RANDOMID}"
         OUTSTR+="_bro${BRONIKOVPAR}"
         OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
-
-        submitslurm --pipeline-step "${RANDOMID}_1" \
-            --dependencies "$LASTDEP" -g \
-            -a "$BRONIKOVPAR $IN $OUT" \
-            00regularizedBronikov.sbatch || return $?
-
-        LASTDEP="${RANDOMID}_1"
+        submitslurm --pipeline-step "${NODE_NAME}" --dependencies "$LASTDEP" -g -a "$BRONIKOVPAR $IN $OUT" 00regularizedBronikov.sbatch || return $?
+        LASTDEP="${NODE_NAME}"
         OUTFILES+=("$OUT")
         IN="$OUT"
     fi
 
-    # Optional sinogram strip correction
-    if [[ "$STRIPSMPAR" != "0" ]]; then
+    if [[ ! "$STRIPSMPAR" =~ ^0+$ ]]; then
+        NODE_NAME="2_SSC_${RANDOMID}"
         OUTSTR+="_ssc_sm${STRIPSMPAR}_LA${STRIPLAPAR}"
         OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
-
-        submitslurm --pipeline-step "${RANDOMID}_2" \
-            --dependencies "$LASTDEP" -f allgpu \
-            -a "--sm-size ${STRIPSMPAR} --la-size ${STRIPLAPAR} $IN $OUT" \
-            00sinogramStripCorrection.sbatch || return $?
-
-        LASTDEP="${RANDOMID}_2"
+        submitslurm --pipeline-step "${NODE_NAME}" --dependencies "$LASTDEP" -f allgpu -a "--sm-size $STRIPSMPAR --la-size $STRIPLAPAR $IN $OUT" 00sinogramStripCorrection.sbatch || return $?
+        LASTDEP="${NODE_NAME}"
         OUTFILES+=("$OUT")
         IN="$OUT"
     fi
 
-    # Kaiser filtering always runs
+    # Always filter. Keep this output; only temporary stages enter OUTFILES.
+    NODE_NAME="3_KAI_${RANDOMID}"
     OUTSTR+="_kai${KAISERPAR}"
-    OUT="extb2/${OUTSTR}${SUFFIX}.${EXT}"
+    OUT="extb2/${OUTSTR}_${RANDOMID}.${EXT}"
+    submitslurm --pipeline-step "${NODE_NAME}" --dependencies "$LASTDEP" -f allgpu -a "--pad-symm --window-kaiser --window-kaiser-beta $KAISERPAR $IN $OUT" 09filterFBP.sbatch || return $?
+    LASTDEP="${NODE_NAME}"
+    OUTFILES+=("$OUT")
 
-    submitslurm --pipeline-step "${RANDOMID}_3" \
-        --dependencies "$LASTDEP" -f allgpu \
-        -a "--pad-symm --window-kaiser --window-kaiser-beta ${KAISERPAR} $IN $OUT" \
-        09filterFBP.sbatch || return $?
-
-    LASTDEP="${RANDOMID}_3"
-
-    BASENAME="$(basename "$OUT")"
-    STEM="${BASENAME%.*}"
-    RECDIR="recb2_backproject_${STEM}"
-
-    # Reconstruction
+    #Reconstruction step, dependent on the last filter step. Output is in recb2_cgls_${STEM} or recb2_cgls_bro${REGPAR}_${STEM}${SUFFIX}
     REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck --backproject"
-
     if [[ -n "$SUFFIX" ]]; then
         REC_ARG+=" --output-suffix $SUFFIX"
     fi
-
     REC_ARG+=" $OUT"
+    NODE_NAME="5_REC_${RANDOMID}"
+    submitslurm --pipeline-step "${NODE_NAME}" --dependencies "$LASTDEP" -s -g -a "$REC_ARG" 00reconstructCGLS.sbatch || return $?
+    LASTDEP="${NODE_NAME}"
+    CLEANUPDEPS+=("${NODE_NAME}")
 
-    submitslurm --pipeline-step "${RANDOMID}_REC" \
-        --dependencies "$LASTDEP" -s -g \
-        -a "$REC_ARG" \
-        00reconstructCGLS.sbatch || return $?
+    # One cleanup job per intermediate, all dependent on reconstruction.
+    NODE_NAME="6_REMOVE_${RANDOMID}"
+    for FILE in "${OUTFILES[@]}"; do
+        REMOVE_INDEX=$((REMOVE_INDEX + 1))
+        echo "Scheduling cleanup of intermediate file: $FILE (index $REMOVE_INDEX)"
+        submitslurm --pipeline-step "${NODE_NAME}" --dependencies "${LASTDEP}" -a "-f $FILE" 00remove.sbatch || return $?
+    done
 
-    # Remove intermediate files after reconstruction completes
-    if ((${#OUTFILES[@]})); then
-        echo ${OUTFILES[*]}
-        #submitslurm --pipeline-step "${RANDOMID}_REMOVE" --dependencies "${RANDOMID}_REC" -a "-r -f ${OUTFILES[*]}" 00remove.sbatch || return $?
-    fi
+    return 0
 }
-
+CLEANUPDEPS=("19")
 #Closer bronikov regpar to 0 stronger regularization, higher kaiser beta stronger regularization
 #Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
-fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den
+#fbp_reconstruction --bronikov 0.0005 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Overregularized, too smooth
+#fbp_reconstruction --bronikov 0.005 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Not enough regularization, ring artefacts visible
+fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Probably the best
 
 #Cleanup
-submitslurm --pipeline-step 19 -a " -f -r extb2 " 00remove.sbatch
-submitslurm --pipeline-step 19 -a " *.den " 00remove.sbatch
-submitslurm --pipeline-step 19 -a " *.zar " 00remove.sbatch
+COMMASEPCLEANUPDEPS=$(IFS=,; printf '%s' "${CLEANUPDEPS[*]}")
+submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f -r extb2 " 00remove.sbatch
+submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *den" 00remove.sbatch
+submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *zar " 00remove.sbatch
 
