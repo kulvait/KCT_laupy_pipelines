@@ -201,7 +201,7 @@ cgls_reconstruction() {
     for FILE in "${OUTFILES[@]}"; do
         REMOVE_INDEX=$((REMOVE_INDEX + 1))
         echo "Scheduling cleanup of intermediate file: $FILE (index $REMOVE_INDEX)"
-        submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -a "-f $FILE" 00remove.sbatch || return $?
+        submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -a " -f $FILE" 00remove.sbatch || return $?
     done
 
     # Also wait for branch-local removals before final directory cleanup.
@@ -317,7 +317,7 @@ fbp_reconstruction() {
     for FILE in "${OUTFILES[@]}"; do
         REMOVE_INDEX=$((REMOVE_INDEX + 1))
         echo "Scheduling cleanup of intermediate file: $FILE (index $REMOVE_INDEX)"
-        submitslurm --pipeline-step "${NODE_NAME}" --dependencies "${LASTDEP}" -a "-f $FILE" 00remove.sbatch || return $?
+        submitslurm --pipeline-step "${NODE_NAME}" --dependencies "${LASTDEP}" -a " -f $FILE" 00remove.sbatch || return $?
     done
 
     return 0
@@ -328,10 +328,12 @@ CLEANUPDEPS=("19")
 #fbp_reconstruction --bronikov 0.0005 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Overregularized, too smooth
 #fbp_reconstruction --bronikov 0.005 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Not enough regularization, ring artefacts visible
 fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Probably the best
+fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 11 21 extb2/ext_ll.den 
+fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 extb2/ext_ll.den
 
 #Cleanup
 COMMASEPCLEANUPDEPS=$(IFS=,; printf '%s' "${CLEANUPDEPS[*]}")
-submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f -r extb2 " 00remove.sbatch
-submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *den" 00remove.sbatch
+#submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f -r extb2 " 00remove.sbatch
+#submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *den" 00remove.sbatch
 submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *zar " 00remove.sbatch
 

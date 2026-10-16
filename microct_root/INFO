@@ -15,93 +15,45 @@ Use setupPipelineForBeamtime script to generate this file
 ---------------------------
 Pipeline for reconstruction
 ---------------------------
-#First execute script to create wd directory with individual folders corresponding to scans from beamtime
-script/00createWorkingDirectory
+#Use setupPipelineForBeamtime script or lautools-browser beamtime->project from recipe to generate this file 
+#PATH=$PATH:/data/hereon/wp/group/laupy/bin/ ... if you do not have kct- and dentk- tools in path
 
-#Run diagnostics of the individual scans to see intensity profile or current correction shift
-submitslurm 01scanTimingDiagnostics.sbatch
+#Execute script to create wd directory with individual folders corresponding to scans from beamtime or use lautools-browser workspace->create wd
+#script/00createWorkingDirectory
 
-#Tiff to den format conversion
-submitslurm --pipeline-step 1 00tifftoden.sbatch
+# Run diagnostics of the individual scans to see intensity profile or current correction shift
+submitslurm --pipeline-step 0 01scanTimingDiagnostics.sbatch
 
-#Destar of dark fields and zinger removal for flat fields and img produces img/dar/ref_clean.den
-submitslurm --pipeline-step 2 -a " --remove-input-files" 02destar.sbatch
+# 1) Create lossless HTJ2K Zarr
+submitslurm --pipeline-step 1 -a "--compression htj2k --zip --clevel 0 --output-prefix h2k_ll" 01createZarrStructure.sbatch
 
-#Dark field correction
-submitslurm --pipeline-step 3 -a " --remove-input-files" 03darkFieldCorrect.sbatch
+# 2) Destar
+submitslurm --pipeline-step 2 -a "--zar-input-file h2k_ll.zar --suffix _ll_clean" 02destar.sbatch
 
-#Current correction is skipped in this pipeline but can be run by
-#submitslurm 05currentCorrect.sbatch
+# 3) Dark field correction
+submitslurm --pipeline-step 3 -a "--img img_ll_clean.den --ref ref_ll_clean.den --dar dar_ll_clean.den --remove-input-files" 03darkFieldCorrect.sbatch
 
-#Compute extinction by standard pipeline
-submitslurm -w wd_specific -a "--remove-input-files --ref ref_clean_darksub.den --img img_clean_darksub.den --out ext.den" 06computeExtinction.sbatch
+# 4) Current correction
+submitslurm --pipeline-step 4 -a "--fix-corrupted-h5 --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den" 05currentCorrect.sbatch
 
-#This is 180 deg scan, so use appropriate COD detection
-submitslurm -a "--ext ext_curcor.den" 07detectRotationCenter180.sbatch
-#For 180 scans can be used
-#submitslurm -f com -a "--ext ext_curcor.den" 07detectRotationCenter_sinogramConsistency.sbatch
+# 5) Compute extinction
+submitslurm --pipeline-step 5 -a "--img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den" 06computeExtinction.sbatch
 
-submitslurm -f com 08binExtinctions.sbatch
-submitslurm -s  -a "--rotation-axis-file ext_curcor_rotationcenter180.log extb2_curcor/ext_curcor.den" 00reconstructCGLS.sbatch
+# 6) Detect rotation center from h5
+submitslurm --pipeline-step 6 -a "ext_ll.den" 07detectRotationCenter180.sbatch
 
-submitslurm -s -w wd_step -a "--rotation-axis-file ext_curcor_rotationcenter.log extb2_curcor/ext_curcor.den" 00reconstructCGLS.sbatch
+# 7) Bin extinction directly by 2 in X and Y (median binning; creates extb2/)
+submitslurm --pipeline-step 7 -a "--bin 2 ext_ll.den extb2/ext_ll.den" 00bin.sbatch
 
-#Additional processing which is not part of standard pipeline
-submitslurm -f com -n max-ittg001  -a "recb2_cgls_ext_curcor recb2_cgls_ext_curcor_tv -m -0.1" 00TVregularize.sbatch
-#/asap3/petra3/gpfs/p07/2025/data/11021463/scratch_cc/kulvait/wd/isit008_5_2_a/recb2_cgls_ext_legacy is very good reconstruction while in excentric cases detection of center of rotation failed
-#Use this if all strong are taken 
-#submitslurm -x -f allgpu  -a "--rotation-axis-file ext_legacy_rotationcenter.log extb2/ext_legacy.den" 00reconstructCGLS.sbatch
-#
-#There is very questionable pattern in sinograms wave like, lets test with classical current correction
-#This is due to missing current correction lets correct for it with trigonometric fit
-submitslurm 05currentCorrect.sbatch
-submitslurm 08binExtinctions.sbatch
-#Perform kct-rof --relaxed --force --max-iterations-pdhg 300 --chunk-size 20  --pdhg-mu -0.1 -p 1:3 --gradient-forward-3point --pdhg-sigma -0.2 --pdhg-tau -0.2 testdata_ring.den testdata_ring_rofa.den
-submitslurm -x -f allgpu  -a "--rotation-axis-file ext_legacy_rotationcenter.log extb2_curcor/ext_curcor.den" 00reconstructCGLS.sbatch
-submitslurm -f com 09binFlatFields.sbatch
-submitslurm 13svd.sbatch
-submitslurm -f com -n max-ittg001  -a "--rotation-axis-file ext_curcor_rotationcenter.log extb2_curcor/ext_ref_v5.den" 00reconstructCGLS.sbatch
-submitslurm -f com -n max-ittg001  -a "--rotation-axis-file ext_curcor_rotationcenter.log extb2_curcor/ext_ref_v10.den" 00reconstructCGLS.sbatch
+# 8) FBP filtering: symmetric padding and Kaiser window, beta=5
+submitslurm --pipeline-step 8 -f allgpu -a "--binning 2 --pad-symm --window-kaiser --window-kaiser-beta 5 extb2/ext_ll.den extb2/ext_ll_kaiser.den" 09filterFBP.sbatch
 
-
-#Try FBP reconstruction
-submitslurm -f allgpu -p cnk_233_LCD_ST001_p2_a 24filterEXTFBP.sbatch
-submitslurm -s -f allgpu -p cnk_233_LCD_ST001_p2_a 25reconstructEXTFBP.sbatch
-
-
-#Propagation distance 0.05m
-createWorkingDirectoryForMicrotomography ../../raw/ wd
-submitslurm 00tifftoden.sbatch
-submitslurm 01imageCharacteristics.sbatch
-submitslurm 02destar.sbatch
-submitslurm 09darkFieldCorrect.sbatch
-submitslurm 10currentCorrect.sbatch
-submitslurm 11computeExtinction.sbatch
-submitslurm 12createUnbinnedAlpha.sbatch
-submitslurm 13svd.sbatch
-submitslurm 14createFlatFields.sbatch
-submitslurm 15svdCorrectedExtinctions.sbatch
-submitslurm 16detectRotationCenter.sbatch
-
-submitslurm 18binExtinctions.sbatch
-#!AFTER THE MODIFICATION OF THE PROCEDURE TO COMPUTE ALPHA and BETA
-submitslurm 12createUnbinnedAlpha.sbatch
-#HERE ALSO SUBMIT 
-submitslurm 14createFlatFields_ALPHA.sbatch
-submitslurm 14createFlatFields_BETA.sbatch
-submitslurm 15svdCorrectedExtinctions_ALPHA.sbatch
-submitslurm 15svdCorrectedExtinctions_BETA.sbatch
-submitslurm 16detectRotationCenter.sbatch
-submitslurm 18binExtinctions.sbatch
-submitslurm 19preprocessBinnedTV.sbatch
-submitslurm 20tvCorrectExtinction.sbatch
-submitslurm 21updateRotationCenter.sbatch
-
-#submitslurm 17removeJunkFiles.sbatch
+# 9) Backproject the filtered extinction using h5 geometry
+submitslurm --pipeline-step 9 -s -g -a "--binning 2 --geometry-info h5 --rotation-axis-file ext_ll_rotationcenter180.log --straight-rotation-axis --backproject extb2/ext_ll_kaiser.den" 00reconstructCGLS.sbatch
 
 ---------------------------
        Notes
 ---------------------------
-
 #For comercial puproses is required to use com partition and as of now there is only one GPU node max-ittg001
+#submitslurm -f com -n max-ittg001  -a "recb2_cgls_ext_curcor recb2_cgls_ext_curcor_tv -m -0.1" 00TVregularize.sbatch
 #To list running jobs on the com partition squeue -p com or sq -p com as it is hidden in default report 
