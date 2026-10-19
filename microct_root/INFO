@@ -1,6 +1,5 @@
-Use setupPipelineForBeamtime script to generate this file 
-#PATH=$PATH:/data/hereon/wp/group/laupy/bin/
-#setupPipelineForBeamtime
+#Use setupPipelineForBeamtime script or lautools-browser beamtime->project from recipe to generate this file 
+#PATH=$PATH:/data/hereon/wp/group/laupy/bin/ ... if you do not have kct- and dentk- tools in path
 
 # submitslurm command – key commonly used parameters (see full: submitslurm -h)
 #
@@ -15,6 +14,7 @@ Use setupPipelineForBeamtime script to generate this file
 ---------------------------
 Pipeline for reconstruction
 ---------------------------
+
 #Use setupPipelineForBeamtime script or lautools-browser beamtime->project from recipe to generate this file 
 #PATH=$PATH:/data/hereon/wp/group/laupy/bin/ ... if you do not have kct- and dentk- tools in path
 
@@ -34,10 +34,10 @@ submitslurm --pipeline-step 2 -a "--zar-input-file h2k_ll.zar --suffix _ll_clean
 submitslurm --pipeline-step 3 -a "--img img_ll_clean.den --ref ref_ll_clean.den --dar dar_ll_clean.den --remove-input-files" 03darkFieldCorrect.sbatch
 
 # 4) Current correction
-submitslurm --pipeline-step 4 -a "--fix-corrupted-h5 --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den" 05currentCorrect.sbatch
+submitslurm --pipeline-step 4 -a "--fix-corrupted-h5 --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den --remove-input-files" 05currentCorrect.sbatch
 
 # 5) Compute extinction
-submitslurm --pipeline-step 5 -a "--img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den" 06computeExtinction.sbatch
+submitslurm --pipeline-step 5 -a "--img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den --remove-input-files" 06computeExtinction.sbatch
 
 # 6) Detect rotation center from h5
 submitslurm --pipeline-step 6 -a "ext_ll.den" 07detectRotationCenter180.sbatch
@@ -45,15 +45,23 @@ submitslurm --pipeline-step 6 -a "ext_ll.den" 07detectRotationCenter180.sbatch
 # 7) Bin extinction directly by 2 in X and Y (median binning; creates extb2/)
 submitslurm --pipeline-step 7 -a "--bin 2 ext_ll.den extb2/ext_ll.den" 00bin.sbatch
 
+#Remove un-binned file
+submitslurm --pipeline-step 8 -a " -f ext_ll.den" 00remove.sbatch
+
 # 8) FBP filtering: symmetric padding and Kaiser window, beta=5
 submitslurm --pipeline-step 8 -f allgpu -a "--binning 2 --pad-symm --window-kaiser --window-kaiser-beta 5 extb2/ext_ll.den extb2/ext_ll_kaiser.den" 09filterFBP.sbatch
 
 # 9) Backproject the filtered extinction using h5 geometry
 submitslurm --pipeline-step 9 -s -g -a "--binning 2 --geometry-info h5 --rotation-axis-file ext_ll_rotationcenter180.log --straight-rotation-axis --backproject extb2/ext_ll_kaiser.den" 00reconstructCGLS.sbatch
 
----------------------------
-       Notes
----------------------------
+#Remove source files
+submitslurm --pipeline-step 10 -a " -f extb2/*.den " 00remove.sbatch
+submitslurm --pipeline-step 10 -a " -f *zar" 00remove.sbatch
+submitslurm --pipeline-step 10 -a " -r -f tmp*" 00remove.sbatch
+
+#---------------------------
+#       Notes
+#---------------------------
 #For comercial puproses is required to use com partition and as of now there is only one GPU node max-ittg001
 #submitslurm -f com -n max-ittg001  -a "recb2_cgls_ext_curcor recb2_cgls_ext_curcor_tv -m -0.1" 00TVregularize.sbatch
 #To list running jobs on the com partition squeue -p com or sq -p com as it is hidden in default report 
