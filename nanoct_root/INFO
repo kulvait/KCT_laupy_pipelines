@@ -34,7 +34,7 @@ submitslurm --pipeline-step 2 -a " --zar-input-file h2k_ll.zar --suffix _ll_clea
 submitslurm --pipeline-step 3 -a " --img img_ll_clean.den --ref ref_ll_clean.den --dar dar_ll_clean.den --remove-input-files" 03darkFieldCorrect.sbatch
 
 #Current correction
-submitslurm --pipeline-step 4  -a "--nano-log-file LogScan.log --nano-image-dir raw --force --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den" 05currentCorrect.sbatch
+submitslurm --pipeline-step 4  -a "--nano-log-file LogScan.log --nano-image-dir raw --force --img img_ll_clean_darksub.den --ref ref_ll_clean_darksub.den --remove-input-files" 05currentCorrect.sbatch
 
 #Field statistics, including SNR and photon statistics ... required for 05estimateRegions
 submitslurm --pipeline-step 5 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den" 05estimateFieldStatistics.sbatch
@@ -43,13 +43,19 @@ submitslurm --pipeline-step 5 -a " --img img_ll_clean_darksub_curcor.den --ref r
 submitslurm --pipeline-step 6 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den" 05estimateRegions.sbatch
 
 #Compute extinction by standard pipeline
-submitslurm --pipeline-step 7 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den" 06computeExtinction.sbatch
+submitslurm --pipeline-step 7 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den -remove-input-files" 06computeExtinction.sbatch
 
 #Estimate rotation center
 submitslurm --pipeline-step 8 -a " --regions-json ref_ll_clean_darksub_curcor.json --nano-log-file LogScan.log ext_ll.den" 07detectRotationCenter180.sbatch
 
 #Create binned data
 submitslurm --pipeline-step 9 -a " ext_ll.den extb2/ext_ll.den" 00bin.sbatch
+
+#Remove un-binned file
+submitslurm --pipeline-step 10 -a " -f ext_ll.den" 00remove.sbatch
+
+#Balance angle sequence
+submitslurm --pipeline-step 10 -a " --nano-log-file LogScan.log --json extb2/ext_fbprange.json extb2/ext_ll.den extb2/ext_fbprange.den extb2/ext_fbprange.tck" 09balanceAngleSequence.sbatch
 
 #SSC filter
 #submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
@@ -327,13 +333,13 @@ CLEANUPDEPS=("19")
 #Bronikov ... moderate regularization, REGPAR closer to zero, stronger the regularization
 #fbp_reconstruction --bronikov 0.0005 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Overregularized, too smooth
 #fbp_reconstruction --bronikov 0.005 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Not enough regularization, ring artefacts visible
-fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Probably the best
-fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 11 21 extb2/ext_ll.den 
+#fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Probably the best
+#fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 11 21 extb2/ext_ll.den 
 fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 extb2/ext_ll.den
+fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 extb2/ext_fbprange.den
 
 #Cleanup
 COMMASEPCLEANUPDEPS=$(IFS=,; printf '%s' "${CLEANUPDEPS[*]}")
 #submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f -r extb2 " 00remove.sbatch
 #submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *den" 00remove.sbatch
 submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *zar " 00remove.sbatch
-
