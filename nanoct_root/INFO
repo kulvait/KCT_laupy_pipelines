@@ -43,7 +43,7 @@ submitslurm --pipeline-step 5 -a " --img img_ll_clean_darksub_curcor.den --ref r
 submitslurm --pipeline-step 6 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den" 05estimateRegions.sbatch
 
 #Compute extinction by standard pipeline
-submitslurm --pipeline-step 7 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den -remove-input-files" 06computeExtinction.sbatch
+submitslurm --pipeline-step 7 -a " --img img_ll_clean_darksub_curcor.den --ref ref_ll_clean_darksub_curcor.den --out ext_ll.den --remove-input-files" 06computeExtinction.sbatch
 
 #Estimate rotation center
 submitslurm --pipeline-step 8 -a " --regions-json ref_ll_clean_darksub_curcor.json --nano-log-file LogScan.log ext_ll.den" 07detectRotationCenter180.sbatch
@@ -55,7 +55,7 @@ submitslurm --pipeline-step 9 -a " ext_ll.den extb2/ext_ll.den" 00bin.sbatch
 submitslurm --pipeline-step 10 -a " -f ext_ll.den" 00remove.sbatch
 
 #Balance angle sequence
-submitslurm --pipeline-step 10 -a " --nano-log-file LogScan.log --json extb2/ext_fbprange.json extb2/ext_ll.den extb2/ext_fbprange.den extb2/ext_fbprange.tck" 09balanceAngleSequence.sbatch
+submitslurm --pipeline-step 10 -a " --nano-log-file LogScan.log --force --json extb2/ext_fbprange.json extb2/ext_ll.den extb2/ext_fbprange.den extb2/ext_fbprange.tck" 09balanceAngleSequence.sbatch
 
 #SSC filter
 #submitslurm --pipeline-step 10 -f allgpu -a "--sm-size 201 --la-size 301 extb2/ext_ll.den extb2/ext_ll_ssc.den" 00sinogramStripCorrection.sbatch
@@ -99,6 +99,7 @@ require_value() {
 cgls_reconstruction() {
     local BRONIKOVPAR=0 STRIPSMPAR=0 STRIPLAPAR=0 SUFFIX=""
     local EXTB2="" BASENAME STEM EXT IN OUT OUTSTR RANDOMID REC_ARG RECDIR NODE_NAME
+    local TCK="LogScan.tck"
     local LASTDEP=10 FILE REMOVE_INDEX=0
     local -a OUTFILES=()
     local USAGE="Usage: cgls_reconstruction [--bronikov N] [--strip SM LA] [--suffix SUFFIX] FILE"
@@ -108,6 +109,7 @@ cgls_reconstruction() {
             --bronikov) require_value "$1" "${2:-}" || return $?; BRONIKOVPAR="$2"; shift 2 ;;
             --strip)    require_value "$1" "${2:-}" "${3:-}" || return $?; STRIPSMPAR="$2"; STRIPLAPAR="$3"; shift 3 ;;
             --suffix)   require_value "$1" "${2:-}" || return $?; SUFFIX="$2"; shift 2 ;;
+            --tck)      require_value "$1" "${2:-}" || return $?; TCK="$2"; shift 2 ;;
             -h|--help)  echo "$USAGE"; return 0 ;;
             --)         shift; break ;;
             -*)         echo "Error: unknown option '$1'." >&2; return 2 ;;
@@ -133,8 +135,8 @@ cgls_reconstruction() {
     fi
 
     # -a is a serialized argument string: keep paths/suffixes shell-safe.
-    if [[ ! "$EXTB2" =~ ^[a-zA-Z0-9_./+-]+$ || ! "$SUFFIX" =~ ^[a-zA-Z0-9_.-]*$ ]]; then
-        echo "Error: FILE or SUFFIX contains unsupported whitespace or shell characters." >&2
+    if [[ ! "$EXTB2" =~ ^[a-zA-Z0-9_./+-]+$ || ! "$SUFFIX" =~ ^[a-zA-Z0-9_.-]*$ || ! "$TCK" =~ ^[a-zA-Z0-9_./+-]+$ ]]; then
+        echo "Error: FILE, TCK or SUFFIX contains unsupported whitespace or shell characters." >&2
         return 2
     fi
 
@@ -188,7 +190,7 @@ cgls_reconstruction() {
     STEM="${BASENAME%.*}"
     RECDIR="recb2_cgls_${STEM}"
 
-    REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck"
+    REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info $TCK"
     if [[ -n "$SUFFIX" ]]; then
         REC_ARG+=" --output-suffix $SUFFIX"
         RECDIR+="_${SUFFIX}"
@@ -221,9 +223,10 @@ cgls_reconstruction() {
 fbp_reconstruction() {
     local BRONIKOVPAR=0 KAISERPAR=5 STRIPSMPAR=0 STRIPLAPAR=0 SUFFIX=""
     local EXTB2="" BASENAME STEM EXT IN OUT OUTSTR RANDOMID REC_ARG NODE_NAME
+    local TCK="LogScan.tck"
     local LASTDEP=10 FILE REMOVE_INDEX=0
     local -a OUTFILES=()
-    local USAGE="Usage: fbp_reconstruction [--bronikov N] [--kaiser N] [--strip SM LA] [--suffix SUFFIX] FILE"
+    local USAGE="Usage: fbp_reconstruction [--bronikov N] [--kaiser N] [--strip SM LA] [--suffix SUFFIX] [--tck FILE] FILE"
 
     while (($#)); do
         case "$1" in
@@ -231,6 +234,7 @@ fbp_reconstruction() {
             --kaiser)   require_value "$1" "${2:-}" || return $?; KAISERPAR="$2"; shift 2 ;;
             --strip)    require_value "$1" "${2:-}" "${3:-}" || return $?; STRIPSMPAR="$2"; STRIPLAPAR="$3"; shift 3 ;;
             --suffix)   require_value "$1" "${2:-}" || return $?; SUFFIX="$2"; shift 2 ;;
+            --tck)      require_value "$1" "${2:-}" || return $?; TCK="$2"; shift 2 ;;
             -h|--help)  echo "$USAGE"; return 0 ;;
             --)         shift; break ;;
             -*)         echo "Error: unknown option '$1'." >&2; return 2 ;;
@@ -256,8 +260,8 @@ fbp_reconstruction() {
     fi
 
     # -a is a serialized argument string: keep paths/suffixes shell-safe.
-    if [[ ! "$EXTB2" =~ ^[a-zA-Z0-9_./+-]+$ || ! "$SUFFIX" =~ ^[a-zA-Z0-9_.-]*$ ]]; then
-        echo "Error: FILE or SUFFIX contains unsupported whitespace or shell characters." >&2
+    if [[ ! "$EXTB2" =~ ^[a-zA-Z0-9_./+-]+$ || ! "$SUFFIX" =~ ^[a-zA-Z0-9_.-]*$ || ! "$TCK" =~ ^[a-zA-Z0-9_./+-]+$ ]]; then
+        echo "Error: FILE, TCK or SUFFIX contains unsupported whitespace or shell characters." >&2
         return 2
     fi
 
@@ -308,7 +312,7 @@ fbp_reconstruction() {
     OUTFILES+=("$OUT")
 
     #Reconstruction step, dependent on the last filter step. Output is in recb2_cgls_${STEM} or recb2_cgls_bro${REGPAR}_${STEM}${SUFFIX}
-    REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --geometry-info LogScan.tck --backproject"
+    REC_ARG="--rotation-axis-file ext_ll_rotationcenter180.log --backproject --geometry-info $TCK"
     if [[ -n "$SUFFIX" ]]; then
         REC_ARG+=" --output-suffix $SUFFIX"
     fi
@@ -336,7 +340,7 @@ CLEANUPDEPS=("19")
 #fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 201 301 extb2/ext_ll.den #Probably the best
 #fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 11 21 extb2/ext_ll.den 
 fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 extb2/ext_ll.den
-fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 extb2/ext_fbprange.den
+fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 --tck extb2/ext_fbprange.tck extb2/ext_fbprange.den
 
 #Cleanup
 COMMASEPCLEANUPDEPS=$(IFS=,; printf '%s' "${CLEANUPDEPS[*]}")
