@@ -341,9 +341,11 @@ CLEANUPDEPS=("19")
 #fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 11 21 extb2/ext_ll.den 
 fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 extb2/ext_ll.den
 fbp_reconstruction --bronikov 0.001 --kaiser 5 --strip 0 0 --tck extb2/ext_fbprange.tck extb2/ext_fbprange.den
+cgls_reconstruction --bronikov 0.001 --strip 21 51 extb2/ext_ll.den
 
 #Cleanup
 COMMASEPCLEANUPDEPS=$(IFS=,; printf '%s' "${CLEANUPDEPS[*]}")
-#submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f -r extb2 " 00remove.sbatch
-#submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *den" 00remove.sbatch
+
+submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f -r extb2 " 00remove.sbatch
+submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *den" 00remove.sbatch
 submitslurm --pipeline-step "final_clean" --dependencies ${COMMASEPCLEANUPDEPS} -a " -f *zar " 00remove.sbatch
