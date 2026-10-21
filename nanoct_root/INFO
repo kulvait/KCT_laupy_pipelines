@@ -95,7 +95,7 @@ require_value() {
     done
 }
 
-#FBP with Bronikov
+#CGLS with optional Bronikov regularization and sinogram strip correction
 cgls_reconstruction() {
     local BRONIKOVPAR=0 STRIPSMPAR=0 STRIPLAPAR=0 SUFFIX=""
     local EXTB2="" BASENAME STEM EXT IN OUT OUTSTR RANDOMID REC_ARG RECDIR NODE_NAME
@@ -184,12 +184,27 @@ cgls_reconstruction() {
         IN="$OUT"
     fi
 
-    #Strip ${RANDOMID} from file for clean reconstruction folder name
-    OUT="extb2/${OUTSTR}.${EXT}"
-    NODE_NAME="3_MOV_${RANDOMID}"
-    submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -a " $IN $OUT" 00move.sbatch || return $?
-    LASTDEP="$NODE_NAME"
-    IN="$OUT"
+     # Normalize the final input filename for reconstruction:
+     # Strip ${RANDOMID} from any temp file so derived reconstruction folder names are predictable
+     # If no preprocessing ran, use the original EXTB2 input as-is.
+    if ((${#OUTFILES[@]})); then
+        IN="${OUTFILES[-1]}"
+        OUT="extb2/${OUTSTR}.${EXT}"
+
+        # Move only when source and target differ.
+        if [[ "$IN" != "$OUT" ]]; then
+            NODE_NAME="3_MOV_${RANDOMID}"
+            submitslurm --pipeline-step "$NODE_NAME" --dependencies "$LASTDEP" -a " $IN $OUT" 00move.sbatch || return $?
+            LASTDEP="$NODE_NAME"
+            IN="$OUT"
+            #Update outfiles array
+            unset 'OUTFILES[-1]'
+            OUTFILES+=("$OUT")
+        fi
+    else
+        # No bronikov and no strip: nothing to move, reconstruct directly from original input.
+        IN="$EXTB2"
+    fi
 
     # Reconstruct the latest branch output, or the original input if
     # neither preprocessing stage was requested.
@@ -227,6 +242,7 @@ cgls_reconstruction() {
     return 0
 }
 
+#FBP with Kaiser and optional Bronikov regularization and sinogram strip correction
 fbp_reconstruction() {
     local BRONIKOVPAR=0 KAISERPAR=5 STRIPSMPAR=0 STRIPLAPAR=0 SUFFIX=""
     local EXTB2="" BASENAME STEM EXT IN OUT OUTSTR RANDOMID REC_ARG NODE_NAME
