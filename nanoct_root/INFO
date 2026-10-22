@@ -19,7 +19,7 @@ Pipeline for reconstruction in nanotomography
 #Create subdirectory dar in each wd folder which shall point to dark field project
 
 #Run diagnostics of the individual scans to see intensity profile or current correction shift
-submitslurm --pipeline-step 0 01scanTimingDiagnostics.sbatch
+submitslurm --pipeline-step "warmup" 01scanTimingDiagnostics.sbatch
 
 #You might want symlink darkfield measurement to each folder e.g. when dark sample is wd_dar/nano17222_pco_darks_0p1 then you run
 #submitslurm --pipeline-step 0 -a " ../../wd_dar/nano17222_pco_darks_0p1 dar" 00symlink.sbatch

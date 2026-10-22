@@ -22,7 +22,7 @@ Pipeline for reconstruction
 #script/00createWorkingDirectory
 
 # Run diagnostics of the individual scans to see intensity profile or current correction shift
-submitslurm --pipeline-step 0 01scanTimingDiagnostics.sbatch
+submitslurm --pipeline-step "warmup" 01scanTimingDiagnostics.sbatch
 
 # 1) Create lossless HTJ2K Zarr
 submitslurm --pipeline-step 1 -a "--compression htj2k --zip --clevel 0 --output-prefix h2k_ll" 01createZarrStructure.sbatch
