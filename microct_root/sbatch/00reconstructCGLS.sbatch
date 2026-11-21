@@ -300,21 +300,25 @@ MODULUS=$(calc "(${TO} + 1 - ${FROM}) % ${SLICECOUNT}")
 LAST=$(calc "${TO} - ${MODULUS}")
 LASTSTART=$(calc "${TO} - ${MODULUS} + 1")
 
-redis-server.init
-#GPUCOUNT=$( redis-cli llen IDLEGPU )
-#GPUCOUNT=$( redis-cli llen IDLEGPU )
-GPUCOUNT=$( GPU.py --gpu-count )
+#For log purposes
+GPU --platform-list
+# Start the Redis server unless one runs, create the GPU pool or join the existing one, and subscribe this
+# script as a user of the pool; prints the number of GPUs in the pool
+if ! GPUCOUNT=$(GPU --subscribe --try-start-server --redis-manage-all); then
+	echo "No GPU pool to run reconstruction!" >&2
+	exit 1
+fi
 if [[ $GPUCOUNT == 0 ]]; then
 	echo "No GPU to run reconstruction!"
 	exit 1
 fi
 PROCCOUNT=$( calc "2*$GPUCOUNT" )
+# Get platform ID
+PLATFORMID=$( GPU --platform-id )
 
 #DEBUG
 PID=0
 
-# Get platform ID
-PLATFORMID=$(platformID)
 
 # Start building argument string
 ARG=(
@@ -458,8 +462,8 @@ if [ "$FAILED_JOBS" -ne 0 ]; then
     echo "$FAILED_JOBS jobs failed. Check logs for details." >&2
 fi
 
-#DEBUG
-#redis-server.shutdown
+# The last subscriber alive stops the Redis server
+GPU --unsubscribe --try-stop-server
 
 # End body of the script
 end_time=$(date +%s)

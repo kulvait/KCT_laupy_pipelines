@@ -224,7 +224,7 @@ unset LD_PRELOAD
 source initGanrec
 
 if [[ -z "$PLATFORM_ID" ]]; then
-	PLATFORM_ID=$(platformID)  # Fetch the platformID using the program
+	PLATFORM_ID=$( GPU --default-platform-id )
 fi
 
 # Record the start time

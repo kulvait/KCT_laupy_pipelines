@@ -18,7 +18,7 @@ fi
 . ./params
 
 if [[ -z "${PLATFORM:-}" ]]; then
-    PLATFORM=$(platformID)
+    PLATFORM=$(GPU --default-platform-id) # Heuristic of GPU (CUDA platform with most devices); -p overrides
 fi
 if [[ -z "${ITERATIONS:-}" ]]; then
     ITERATIONS=40
@@ -333,27 +333,52 @@ prg_sync() {
 
 prg_async()
 {
-#Signature $OUTPUTLOG $CMD1 $CMD2 ...
-    OUTPUTLOG=$1
+    # Signature: OUTPUTLOG CMD1 CMD2 ...
+    local OUTPUTLOG=$1
     shift
-    #DEV=$(redis-cli --raw brpop IDLEGPU 0 | awk '{if(NR>1)print}')
-	read DEV < <(GPU.py --pid $$ --get)
-    ID=$PLATFORM:$DEV
-    for PRG in "$@"; do
-        exit_code=0
-        PRG="${PRG} -p $ID"
-		prg_sync "${OUTPUTLOG}" "${PRG}"
+    local DEV ID PRG
+    local owner_pid="$$"
+    local exit_code=0
+    local release_code=0
+    if DEV=$(GPU --pid "$owner_pid" --get); then
+        if [[ ! "$DEV" =~ ^[0-9]+$ ]]; then
+            printf 'ERROR: GPU returned an invalid device ID: %q\n' \
+                "$DEV" >&2
+            return 1
+        fi
+    else
         exit_code=$?
-	    if (( exit_code != 0 )); then
-	       echo "Error: Command '$PRG' failed with exit code $exit_code" >&2
-	       GPU.py --release $DEV
-           return $exit_code
-	    fi
+        echo "ERROR: GPU acquisition failed; reconstruction not started." >&2
+        return "$exit_code"
+    fi
+
+    ID="${PLATFORM}:${DEV}"
+    for PRG in "$@"; do
+        PRG="${PRG} -p ${ID}"
+
+        if prg_sync "$OUTPUTLOG" "$PRG"; then
+            :
+        else
+            exit_code=$?
+            echo "Error: Command '$PRG' failed with exit code $exit_code" >&2
+            break
+        fi
     done
-    #node=$(redis-cli brpop $PLATFORM 0)
-    #gpurelease $DEV
-    #redis-cli lpush IDLEGPU $DEV
-	GPU.py --release $DEV
+
+    # Release once, whether reconstruction succeeded or failed.
+    if GPU --pid "$owner_pid" --release "$DEV"; then
+        return "$exit_code"
+    else
+        release_code=$?
+        echo "ERROR: Failed to release GPU ${DEV}." >&2
+    	if (( exit_code != 0 )); then
+    		# Preserve the reconstruction failure if both operations failed.
+        	return "$exit_code"
+	    else
+			echo "prg_async completed successfully, but GPU release failed with exit code $release_code" >&2
+			return "$release_code"
+    	fi
+    fi
 }
 
 TMPDIR=$(mktemp -d -p . tmp_reconstructSlice2D_volumes.XXXXX)
