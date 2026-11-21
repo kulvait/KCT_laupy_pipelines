@@ -217,25 +217,13 @@ echo "BOXX=$BOXX"
 echo "BOXY=$BOXY"
 
 unset LD_PRELOAD
-source initGanrec
+source initPython --module cuda/11.8
 
 #Start of the body of the script
-
-function LoadModule()
-{
-    if module list 2>&1| grep -qw $1; then
-        echo "Module $1 already loaded."
-    else
-        echo "Loading module $1."
-        module load $1
-    fi  
-}
 
 THREADS=`nproc --all`
 ARX="--force -j ${THREADS}"
 
-LoadModule maxwell
-LoadModule cuda/11.8
 
 source params
 pixel_size_x=${pixel_size_x:-1}
@@ -317,13 +305,10 @@ PROCCOUNT=$( calc "2*$GPUCOUNT" )
 #DEBUG
 PID=0
 
-# Get platform ID
-PLATFORMID=$( GPU --platform-id )
 
 # Start building argument string
 ARG=(
   --rotation-axis-file "$ROTATIONAXISFILE"
-  -p "$PLATFORMID"
 )
 if [[ "$BACKPROJECT_ONLY" == true ]]; then
    ARG+=(-f)

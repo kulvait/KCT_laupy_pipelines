@@ -183,7 +183,7 @@ if [[ -z "$PADDING" ]]; then
 fi
 
 # === Load environment ===
-source initGanrec
+source initPython --module cuda/11.8
 
 # === Enter working directory ===
 cd "$WD" || { echo "Error: Cannot enter working directory $WD"; exit 1; }

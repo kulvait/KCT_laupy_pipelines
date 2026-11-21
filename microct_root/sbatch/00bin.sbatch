@@ -145,7 +145,7 @@ fi
 echo "START $scriptname $WD $IN $OUT" | tee /dev/stderr
 
 unset LD_PRELOAD
-source initGanrec
+source initPython
 
 ARG=(--force)
 ARG+=("--bin-x" "$BNX")

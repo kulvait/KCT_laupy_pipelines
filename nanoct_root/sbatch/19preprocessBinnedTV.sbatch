@@ -8,7 +8,7 @@
 #SBATCH --error=log/19preprocessBinnedTV-%N-%j.err
 cd $1
 echo "Processing $1"
-source initGanrec
+source initPython
 source sourcePath
 
 THREADS=$(nproc --all)

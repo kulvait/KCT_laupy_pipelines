@@ -14,7 +14,7 @@ trap 'echo "[$(date)] ERROR in ${scriptname}:${LINENO}: ${BASH_COMMAND}" >&2' ER
 cd $1
 
 echo "Processing $1"
-source initGanrec
+source initPython
 
 THREADS=$(nproc --all)
 ARG="--force -j $THREADS"

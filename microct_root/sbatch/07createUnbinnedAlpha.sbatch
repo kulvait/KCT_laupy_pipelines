@@ -9,7 +9,7 @@
 #SBATCH --error=log/createUnbinnedAlpha-%N-%j.err
 SCRIPTNAME=$(basename "$0")
 echo "Executing $SCRIPTNAME $@"
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 ARG="--force -j 10"

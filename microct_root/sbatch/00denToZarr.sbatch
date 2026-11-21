@@ -115,7 +115,7 @@ if [[ ! -d "$OUTPUT_DIR" ]]; then
 fi
 
 unset LD_PRELOAD
-source initZarr
+source initPython
 
 ARG="--zip --verbose --zarrv3 -j 0"
 if [[ "$FORCE" == true ]]; then

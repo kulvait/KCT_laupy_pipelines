@@ -120,7 +120,7 @@ fi
 WD="${POSITIONAL_ARGS[0]}"
 
 #Start script
-source initGanrec
+source initPython
 
 cd "$WD" || { echo "Error: Cannot change to working directory $WD" >&2 ; exit 1; }
 

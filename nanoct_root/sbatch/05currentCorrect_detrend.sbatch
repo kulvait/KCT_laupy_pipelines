@@ -50,7 +50,7 @@ else
 fi
 
 #Start script
-source initGanrec
+source initPython
 source sourcePath
 
 

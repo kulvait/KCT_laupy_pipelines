@@ -175,7 +175,7 @@ fi
 cd $WD
 
 unset LD_PRELOAD
-source initGanrec
+source initPython
 
 TMPDIR=$(mktemp -d -p . "tmp_28cropAndMask_XXXXX")
 INPUTBASE=$(basename "$INPUT")

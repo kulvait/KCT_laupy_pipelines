@@ -6,7 +6,7 @@
 #SBATCH --job-name=20tvCorrectExtinction
 #SBATCH --output=log/20tvCorrectExtinction-%N-%j.out
 #SBATCH --error=log/20tvCorrectExtinction-%N-%j.err
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 echo "Processing $1"

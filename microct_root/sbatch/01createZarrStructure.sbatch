@@ -115,7 +115,7 @@ fi
 
 cd "$WD" || { echo "Failed to cd into $WD"; exit 1; }
 
-source initZarr
+source initPython
 H5FILE=h5
 RAWDIR=raw
 ARG=()

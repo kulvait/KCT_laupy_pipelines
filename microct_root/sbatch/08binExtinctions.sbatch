@@ -73,7 +73,7 @@ WD="${POSITIONAL_ARGS[0]}"
 cd "$WD" || { echo "Cannot cd into $WD"; exit 1; }
 echo "Processing $WD"
 
-source initGanrec
+source initPython
 source sourcePath
 
 THREADS=$(nproc --all)

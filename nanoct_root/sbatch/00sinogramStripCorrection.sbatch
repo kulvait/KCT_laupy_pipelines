@@ -167,7 +167,7 @@ if [[ -z "$WD" || -z "$EXT" || -z "$OUT" ]]; then
 fi
 
 unset LD_PRELOAD
-source initGanrec
+source initPython
 cd $WD || exit 1
 
 if [ ! -f "$EXT" ]; then

@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Copy of the initPython of the laupy deployment (laupy-deploy: group/laupy/bin/initPython), kept
+# with the recipe so that its scripts can use `source initPython`. It sets up the environment with
+# initEnv; adapt it if the recipe needs another setup.
+#
+# Shared Lau Python environment for recipes (Bash or Zsh):
+#   source initPython [--module NAME]...
+# Loads the modules maxwell and mamba/3.13 (/software/mamba/2026.02) plus the given ones (e.g. --module cuda/11.8) and activates
+# LAUPY_PYTHON (path of a Conda/Mamba environment, set e.g. by submitslurm --python) if set, else
+# the shared Lau environment.
+#
+# A file sourced without arguments sees the arguments of the calling script, so arguments are only
+# taken as initPython's own when the first one is --module (or -h/--help); otherwise they are ignored.
+
+_initPython_main() {
+    local environment="${LAUPY_PYTHON:-/data/hereon/wp/group/laupy/share/mamba_env/lau}"
+    local -a modules=(--module maxwell --module mamba/3.13)
+
+    case "${1:-}" in
+        --module|-h|--help)
+            while (( $# > 0 )); do
+                case "$1" in
+                    --module)
+                        if [[ -z "${2:-}" || "$2" == -* ]]; then
+                            printf 'ERROR: initPython: --module requires a value.\n' >&2
+                            return 2
+                        fi
+                        modules+=(--module "$2")
+                        shift 2
+                        ;;
+                    -h|--help)
+                        printf 'Usage: source initPython [--module NAME]...\n'
+                        printf '  Loads maxwell, mamba/3.13 and the given modules; activates $LAUPY_PYTHON if set,\n'
+                        printf '  else /data/hereon/wp/group/laupy/share/mamba_env/lau.\n'
+                        return 0
+                        ;;
+                    *)
+                        printf 'ERROR: initPython: unknown argument %s (only --module NAME).\n' "$1" >&2
+                        return 2
+                        ;;
+                esac
+            done
+            ;;
+    esac
+
+    if [[ -n "${LAUPY_PYTHON:-}" ]]; then
+        printf 'Python environment from LAUPY_PYTHON: %s\n' "$LAUPY_PYTHON"
+    fi
+    source /data/hereon/wp/group/laupy/bin/initEnv \
+        --env "$environment" \
+        "${modules[@]}" \
+        --user-site off
+}
+
+_initPython_finish() {
+    unset -f _initPython_main _initPython_finish
+    return "$1"
+}
+
+if _initPython_main "$@"; then
+    _initPython_finish 0
+else
+    _initPython_finish "$?"
+fi

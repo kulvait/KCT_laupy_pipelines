@@ -7,7 +7,7 @@
 #SBATCH --job-name=flatFieldCorrect
 #SBATCH --output=log/flatFieldCorrect-%N-%j.out
 #SBATCH --error=log/flatFieldCorrect-%N-%j.err
-source initGanrec
+source initPython
 source sourcePath
 #./reconstructSlice.py $1 --force --gpu --cgls --verbose --savetiff --output-folder $2
 cd $1

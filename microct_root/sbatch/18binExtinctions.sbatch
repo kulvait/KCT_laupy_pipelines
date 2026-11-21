@@ -8,7 +8,7 @@
 #SBATCH --error=log/18binExtinctions-%N-%j.err
 cd $1
 echo "Processing $1"
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 THREADS=$(nproc --all)

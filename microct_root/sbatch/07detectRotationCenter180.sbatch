@@ -115,7 +115,7 @@ fi
 
 cd "$WD" || { echo "Failed to cd into $WD"; exit 1; }
 
-source initGanrec
+source initPython
 
 # --- Prepare output directories and filenames ---
 LOGDIR="log/detectRotationCenter"

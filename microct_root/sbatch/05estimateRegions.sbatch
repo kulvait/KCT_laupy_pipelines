@@ -89,7 +89,7 @@ fi
 
 cd "$WD" || { echo "Failed to cd into $WD"; exit 1; }
 
-source initGanrec
+source initPython
 
 REF_BASE=$(basename "$REF" .den)
 IMG_BASE=$(basename "$IMG" .den)

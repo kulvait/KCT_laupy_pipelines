@@ -141,7 +141,7 @@ fi
 
 cd "$WD"
 unset LD_PRELOAD
-source initGanrec
+source initPython
 
 for command in python selectAngleSequenceForFBP createTickFile dentk-cat cp; do
     if ! command -v "$command" >/dev/null 2>&1; then

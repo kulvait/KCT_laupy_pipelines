@@ -187,7 +187,7 @@ fi
 
 cd "$WD" || { echo "Failed to cd into $WD" >&2; exit 1; }
 
-source initZarr
+source initPython
 
 ARG=()
 ARG+=("--force")

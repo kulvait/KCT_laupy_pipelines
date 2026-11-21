@@ -86,7 +86,7 @@ else
 fi
 
 #Start script
-source initGanrec
+source initPython
 
 
 cd "$WD" || { echo "Failed to cd into $1"; exit 1; }

@@ -6,7 +6,7 @@
 #SBATCH --job-name=10currentCorrect
 #SBATCH --output=log/10currentCorrect-%N-%j.out
 #SBATCH --error=log/10currentCorrect-%N-%j.err
-source initGanrec
+source initPython
 cd $1
 mkdir -p out
 currentCorrect.py --type IMG h5 img_cor_df.den img_dc.den --saveinfo out/inf_img_dc.den --savefig out/inf_img_dc.pdf

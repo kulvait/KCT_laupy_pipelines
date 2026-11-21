@@ -9,7 +9,7 @@
 SCRIPTNAME=$(basename "$0")
 echo "$SCRIPTNAME $@"
 
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 THREADS=`nproc --all`

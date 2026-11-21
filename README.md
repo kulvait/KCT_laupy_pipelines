@@ -21,7 +21,7 @@ KCT_laupy_pipelines/
 Structure of each recipe directory is as follows:
 
 ```text
-synchro_mouse/
+synchro_sample/
 ├── bin/
 ├── sbatch/
 ├── script/
@@ -29,3 +29,14 @@ synchro_mouse/
 ```
 
 
+
+- `sbatch/`: the SLURM job scripts, submitted with `submitslurm`.
+- `bin/`: programs the job scripts call, and `initPython`.
+- `script/`: scripts of the recipe run in or on the working directory (e.g. `02destar`).
+- `INFO`: the order of the steps and the `submitslurm` calls of the pipeline.
+
+The job scripts set up Python with `source initPython` (GPU scripts with
+`source initPython --module cuda/11.8`). `bin/initPython` is a copy of the `initPython` of the
+laupy deployment (laupy-deploy), kept with the recipe: it loads the modules `maxwell` and
+`mamba/3.13` plus the `--module` ones and activates `$LAUPY_PYTHON` (`submitslurm --python`) if
+set, else the shared Lau environment, using `initEnv`. Adapt it if a recipe needs another setup.

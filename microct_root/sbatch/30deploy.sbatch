@@ -164,7 +164,7 @@ if [ "$DEPLOY_MODE" = "process" ]; then
 fi
 
 if [[ "$ZAR_TO_TIFF" == true ]]; then
-   	source initZarr
+   	source initPython
 fi
 
 

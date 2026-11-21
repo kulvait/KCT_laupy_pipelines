@@ -119,7 +119,7 @@ if ! ls "$INPUT_DIR"/*.tif &> /dev/null; then
 fi
 
 unset LD_PRELOAD
-source initZarr
+source initPython
 
 ARG="--zip --verbose --zarrv3 -j 0"
 if [[ "$FORCE" == true ]]; then

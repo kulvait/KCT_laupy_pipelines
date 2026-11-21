@@ -47,7 +47,7 @@ cd "$WD" || { echo "Error: Could not change to directory $WD"; exit 1; }
 
 
 # --- Load environment ---
-source initGanrec
+source initPython
 source sourcePath
 
 # --- Prepare output directories and filenames ---

@@ -6,7 +6,7 @@
 #SBATCH --job-name=13svd
 #SBATCH --output=log/13svd-%N-%j.out
 #SBATCH --error=log/13svd-%N-%j.err
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 rm -f ref_dc_s.den

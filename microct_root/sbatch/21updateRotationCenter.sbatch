@@ -6,7 +6,7 @@
 #SBATCH --job-name=21updateRotationCenter
 #SBATCH --output=log/21updateRotationCenter-%N-%j.out
 #SBATCH --error=log/21updateRotationCenter-%N-%j.err
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 echo "Processing $1"

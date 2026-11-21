@@ -11,7 +11,7 @@ set -euo pipefail
 jobname="${PIPELINE_JOBNAME:-$(basename "$0")}"
 trap 'echo "[$(date)] ERROR in ${jobname}:${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-source initGanrec
+source initPython
 cd $1
 LOGDIR="log/ScanDiagnostics"
 mkdir -p $LOGDIR

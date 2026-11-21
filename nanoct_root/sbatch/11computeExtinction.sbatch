@@ -6,7 +6,7 @@
 #SBATCH --job-name=11computeExtinction
 #SBATCH --output=log/11computeExtinction-%N-%j.out
 #SBATCH --error=log/11computeExtinction-%N-%j.err
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 THREADS=`nproc --all`

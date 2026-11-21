@@ -92,7 +92,7 @@ if [ ! -f "$FITBASIS" ]; then
 fi
 
 unset LD_PRELOAD
-source initGanrec
+source initPython
 
 THREADS=$(nproc --all)
 ARG="--force -j $THREADS"

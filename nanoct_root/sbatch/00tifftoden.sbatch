@@ -60,7 +60,7 @@ if [[ ! -d "$WD" ]]; then
 fi
 cd "$WD"
 
-source initGanrec
+source initPython
 
 #Remove previsous
 #Exit if dar.den and img.den and ref.den exist

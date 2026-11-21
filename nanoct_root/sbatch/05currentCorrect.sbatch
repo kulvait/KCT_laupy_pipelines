@@ -180,7 +180,7 @@ else
 fi
 
 # Retain the existing environment initialization.
-source initGanrec
+source initPython
 
 cd -- "$WD"
 echo "Working directory: $PWD"

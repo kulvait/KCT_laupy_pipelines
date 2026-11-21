@@ -221,7 +221,7 @@ else
 fi
 
 unset LD_PRELOAD
-source initGanrec
+source initPython --module cuda/11.8
 
 if [[ -z "$PLATFORM_ID" ]]; then
 	PLATFORM_ID=$( GPU --default-platform-id )
@@ -232,18 +232,6 @@ start_time=$(date +%s)
 #Start of the body of the script
 
 
-function LoadModule()
-{
-    if module list 2>&1| grep -qw $1; then
-        echo "Module $1 already loaded."
-    else
-        echo "Loading module $1."
-        module load $1
-    fi  
-}
-
-LoadModule maxwell
-LoadModule cuda/11.8
 
 TMPDIR=$(mktemp -d -p . "tmp_00TVregularize_XXXXXX")
 TIFPREFIX=""

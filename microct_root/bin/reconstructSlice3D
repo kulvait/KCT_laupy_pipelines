@@ -1,17 +1,15 @@
 #!/bin/bash
 #To run this script properly needed 
-#source initGanrec
-#or
-#LoadModule python/3.10
+#source initPython --module cuda/11.8 (Python environment with laupy, modules maxwell, mamba/3.13 and cuda/11.8)
 #Detector size is in h5 file when no file is provided
 if [ ! -f ./params ]; then
     echo "File params not found."
     exit 1
 fi
 . ./params
-if [[ -z "$PLATFORM" ]]; then #If variable is not defined or empty
-    PLATFORM=$(GPU --default-platform-id) # Heuristic of GPU (CUDA platform with most devices); -p overrides
-fi
+# OpenCL platform of the GPU reconstruction: empty means the platform of the GPU pool (GPU --get-with-platform);
+# -p or params set it explicitly
+PLATFORM="${PLATFORM:-}"
 if [[ -z "$ITERATIONS" ]]; then
     ITERATIONS=40
 fi
@@ -178,26 +176,36 @@ prg_sync()
 prg_async()
 {
     # Signature: OUTPUTLOG CMD1 CMD2 ...
-    # Takes a GPU from the laupy GPU pool (GPU --get), held by this script, and releases it once at the end
+    # Takes a GPU from the laupy GPU pool (GPU --get-with-platform, or --get with -p), held by this script, and releases it once at the end
     local OUTPUTLOG=$1
     shift
     local DEV ID PRG
     local owner_pid="$$"
     local exit_code=0
     local release_code=0
-    if DEV=$(GPU --pid "$owner_pid" --get); then
-        if [[ ! "$DEV" =~ ^[0-9]+$ ]]; then
-            printf 'ERROR: GPU returned an invalid device ID: %q\n' \
-                "$DEV" >&2
-            return 1
+    # ID is PLATFORM:DEVICE. Without an explicit platform (-p or params), GPU gives the platform of the pool
+    # together with the device; with one, only the device is taken.
+    if [[ -n "${PLATFORM:-}" ]]; then
+        if DEV=$(GPU --pid "$owner_pid" --get); then
+            ID="${PLATFORM}:${DEV}"
+        else
+            exit_code=$?
         fi
+    elif ID=$(GPU --pid "$owner_pid" --get-with-platform); then
+        DEV="${ID#*:}"
     else
         exit_code=$?
+    fi
+    if (( exit_code != 0 )); then
         echo "ERROR: GPU acquisition failed; reconstruction not started." >&2
         return "$exit_code"
     fi
+    if [[ ! "$ID" =~ ^[0-9]+:[0-9]+$ ]]; then
+        printf 'ERROR: GPU returned an invalid PLATFORM:DEVICE: %q\n' \
+            "$ID" >&2
+        return 1
+    fi
 
-    ID="${PLATFORM}:${DEV}"
     for PRG in "$@"; do
         PRG="${PRG} -p ${ID}"
 

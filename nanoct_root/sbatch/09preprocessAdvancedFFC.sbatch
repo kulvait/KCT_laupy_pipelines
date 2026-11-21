@@ -98,7 +98,7 @@ if [ ! -d "$WD" ]; then
 fi
 
 unset LD_PRELOAD
-source initGanrec
+source initPython
 # Initialize environment and cd into WD
 cd "$WD"
 

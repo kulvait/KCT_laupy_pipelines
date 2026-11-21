@@ -115,7 +115,7 @@ if [ ! -d "$WD" ]; then
 fi
 
 cd $WD
-source initGanrec
+source initPython
 
 TMPDIR=$(mktemp -d -p . "tmp_08svd_XXXXX")
 

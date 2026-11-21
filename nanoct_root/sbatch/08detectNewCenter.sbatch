@@ -6,7 +6,7 @@
 #SBATCH --job-name=08detectNewCenter
 #SBATCH --output=log/08detectNewCenter-%N-%j.out
 #SBATCH --error=log/08detectNewCenter-%N-%j.err
-source initGanrec
+source initPython
 source sourcePath
 cd $1
 echo "Processing $1"
