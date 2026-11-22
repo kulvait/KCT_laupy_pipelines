@@ -25,7 +25,7 @@ CLEVEL=5
 BITSPERSAMPLE=""
 OUTPUT_PREFIX="raw_zarr"
 V2=false
-THREADS=0
+THREADS=""
 NO_CHECK_BLOCK_ORDER=false
 ZERO_BASED_LOCAL_INDICES=false
 
@@ -199,7 +199,9 @@ fi
 
 ARG=()
 ARG+=("--force")
-ARG+=("-j" "$THREADS")
+if [[ -n "$THREADS" ]]; then
+	ARG+=("-j" "$THREADS")
+fi
 ARG+=("--raw-dir" "$RAW_DIR")
 
 if [[ "$ZIP" == true ]]; then

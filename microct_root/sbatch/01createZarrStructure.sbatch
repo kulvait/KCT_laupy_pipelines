@@ -25,7 +25,7 @@ JPEGXR=false
 CLEVEL=5
 OUTPUT_PREFIX="raw_zarr"
 V2=false
-THREADS=0
+THREADS=""
 
 usage() {
     local mode="${1:-help}"
@@ -120,7 +120,9 @@ H5FILE=h5
 RAWDIR=raw
 ARG=()
 ARG+=("--force")
-ARG+=("-j" "$THREADS")
+if [[ -n "$THREADS" ]]; then
+    ARG+=("-j" "$THREADS")
+fi
 if [[ "$ZIP" == true ]]; then
 	ARG+=("--zip")
 	OUTPUT="${OUTPUT_PREFIX}.zar"
